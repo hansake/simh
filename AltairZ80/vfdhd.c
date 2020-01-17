@@ -43,11 +43,6 @@
 #define USE_VGI     /* Use 275-byte VGI-format sectors (includes all metadata) */
 
 #include "altairz80_defs.h"
-
-#if defined (_WIN32)
-#include <windows.h>
-#endif
-
 #include "sim_imd.h"
 
 /* #define DBG_MSG */
@@ -232,7 +227,7 @@ static t_stat vfdhd_attach(UNIT *uptr, CONST char *cptr)
     t_stat r;
     unsigned int i = 0;
 
-    r = attach_unit(uptr, cptr);                        /* attach unit                          */
+    r = attach_unit(uptr, cptr);    /* attach unit                          */
     if(r != SCPE_OK)                /* error?                               */
         return r;
 

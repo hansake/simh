@@ -262,7 +262,7 @@ static int DoDiskOperation(desc_t *dsc, uint8 val)
         case READ_SEC:
             addr = (dsc->track * SPT) + dsc->sector - 1;
             if (sim_fseek(cpx, addr * SEC_SZ, SEEK_SET) == 0) {
-            rtn = sim_fread(blanksec, 1, SEC_SZ, cpx);
+                rtn = sim_fread(blanksec, 1, SEC_SZ, cpx);
                 if ((rtn != SEC_SZ) && (current_disk_flags & UNIT_DSK_VERBOSE) &&
                     (warnAttached[current_disk] < warnLevelDSK)) {
                 warnAttached[current_disk]++;
@@ -284,11 +284,11 @@ static int DoDiskOperation(desc_t *dsc, uint8 val)
         case WRITE_SEC:
             addr = (dsc->track * SPT) + dsc->sector - 1;
             if (sim_fseek(cpx, addr * SEC_SZ, SEEK_SET) == 0) {
-            addr = dsc->addr_l + (dsc->addr_h << 8); /* no assumption on endianness */
-            for (kt = 0; kt < SEC_SZ; kt++) {
-                blanksec[kt] = GetBYTEWrapper(addr++);
-            }
-            sim_fwrite(blanksec, 1, SEC_SZ, cpx);
+                addr = dsc->addr_l + (dsc->addr_h << 8); /* no assumption on endianness */
+                for (kt = 0; kt < SEC_SZ; kt++) {
+                    blanksec[kt] = GetBYTEWrapper(addr++);
+                }
+                sim_fwrite(blanksec, 1, SEC_SZ, cpx);
             } else {
                 if ((current_disk_flags & UNIT_DSK_VERBOSE) &&
                     (warnAttached[current_disk] < warnLevelDSK)) {
@@ -365,134 +365,3 @@ static int32 fif_io(const int32 port, const int32 io, const int32 data) {
     }
     return 0;
 }
-
-#define ERNIES_FTP 0
-#if ERNIES_FTP
-
-#define WRK_BUF_SZ  150
-#define FCB_SIZE    32
-#define NAME_LTH    8
-#define EXT_LTH     3
-
-
-/**************************************************
-*/
-static void xfero(int32 addr, char *src, int32 lth)
-{
-    while (lth--) {
-        PutBYTEWrapper(addr++, *src++);
-    }
-}
-
-/**************************************************
-*/
-static void xferi(int32 addr, char *dst, int32 lth)
-{
-    while (lth--) {
-        *dst++ = GetBYTEWrapper(addr++);
-    }
-}
-
-#if !defined (_WIN32)
-static void strupr(char *fn) {
-    while (*fn) {
-        if (('a' <= *fn) && (*fn <= 'z'))
-            *fn -= 'a' - 'A';
-        fn++;
-    }
-}
-#endif
-
-/**************************************************
-*/
-static void initfcb(char *fcb, char *fn, int32 flg)
-{
-    char *p1 = fcb;
-
-    if (flg)
-    {
-        strupr(fn);
-    }
-    memset (fcb, 0 , FCB_SIZE);
-    memset (fcb + 1, ' ', NAME_LTH + EXT_LTH);
-    p1++;
-    while (*fn && (*fn != '.'))
-    {
-        *p1++ = *fn++;
-    }
-    if (*fn == '.')
-    {
-        fn++;
-    }
-    p1 = fcb + NAME_LTH + 1;
-    while (*fn && (*fn != '.'))
-    {
-        *p1++ = *fn++;
-    }
-}
-
-/**************************************************
-
-    FTP interface - most of the work is done here
-    The IMDOS/CPM application only does minimal work
-
-*/
-
-char message[WRK_BUF_SZ];
-char temp   [WRK_BUF_SZ];
-FILE * myfile;
-
-uint8 FTP(int32 BC, int32 DE)
-{
-    char   *p1, *p2;
-    int32   retval;
-
-    xferi(DE, temp, SEC_SZ);
-    p1 = temp;
-    switch (BC & 0x7f)
-    {
-        case 0:
-            memcpy(message, p1 + 2, *(p1 + 1));
-            *(message + *(p1 + 1)) = 0;
-            p2 = strtok(message, " \t");
-            if (!strcmp(p2, "get"))
-            {
-                p2 = strtok(NULL, " \t");
-                if (myfile = fopen(p2, "rb"))
-                {
-                    initfcb(temp, p2, 1);
-                    xfero(DE + 2, temp, 32);
-                    retval = 0;
-                    break;
-                }
-            }
-            if (!strcmp(p2, "era"))
-            {
-                p2 = strtok(NULL, " \t");
-                initfcb(temp, p2, 0);
-                xfero(DE + 2, temp, 32);
-                retval = 1;
-                break;
-            }
-            retval = 0xff;
-            break;
-
-        case 20:
-            memset(temp, 0x1a, SEC_SZ);
-            retval = sim_fread(temp, 1, SEC_SZ, myfile) ? 0 : 1;
-            xfero( DE, temp, SEC_SZ);
-            if (retval)
-            {
-                fclose(myfile);
-            }
-            break;
-    }
-    return retval;
-}
-
-#endif /* ERNIES_FTP */
-
-/* end of the source */
-
-
-

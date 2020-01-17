@@ -47,10 +47,9 @@ extern int32 int_vec_set[IPL_HLVL][32];                 /* bits to set in vector
 extern int32 (*int_ack[IPL_HLVL][32])(void);
 extern t_stat (*iodispR[IOPAGESIZE >> 1])(int32 *dat, int32 ad, int32 md);
 extern t_stat (*iodispW[IOPAGESIZE >> 1])(int32 dat, int32 ad, int32 md);
+extern DIB *iodibp[IOPAGESIZE >> 1];
 
 extern t_stat build_dib_tab (void);
-
-static DIB *iodibp[IOPAGESIZE >> 1];
 
 static void build_vector_tab (void);
 
@@ -128,9 +127,9 @@ if (dptr == NULL)
 dibp = (DIB *) dptr->ctxt;
 if ((dibp == NULL) || (dibp->ba <= IOPAGEBASE))
     return SCPE_IERR;
-if (sim_switches & SWMASK ('H'))
+if ((sim_switches & SWMASK('H')) || (sim_switch_number == 16))
     radix = 16;
-if (sim_switches & SWMASK ('O'))
+if ((sim_switches & SWMASK('O')) || (sim_switch_number == 8))
     radix = 8;
 fprintf (st, "address=");
 fprint_val (st, (t_value) dibp->ba, DEV_RDX, 32, PV_LEFT);
@@ -222,9 +221,9 @@ if (dptr == NULL)
 dibp = (DIB *) dptr->ctxt;
 if (dibp == NULL)
     return SCPE_IERR;
-if (sim_switches & SWMASK ('H'))
+if ((sim_switches & SWMASK('H')) || (sim_switch_number == 16))
     radix = 16;
-if (sim_switches & SWMASK ('O'))
+if ((sim_switches & SWMASK('O')) || (sim_switch_number == 8))
     radix = 8;
 vec = dibp->vec;
 if (arg)
@@ -307,6 +306,7 @@ const char *cdname;
 
 if ((dptr == NULL) || (dibp == NULL))                   /* validate args */
     return SCPE_IERR;
+dibp->dptr = dptr;                                      /* save back pointer */
 if (dibp->vnum > VEC_DEVMAX)
     return SCPE_IERR;
 vec = dibp->vec;
@@ -381,7 +381,7 @@ for (i = 0; i < dibp->vnum; i++) {                      /* loop thru vec */
             int_vec[ilvl][ibit] = vec;
         }
     }
-/* Register I/O space address and check for conflicts */
+/* Register(Deregister) I/O space address and check for conflicts */
 for (i = 0; i < (int32) dibp->lnt; i = i + 2) {         /* create entries */
     idx = ((dibp->ba + i) & IOPAGEMASK) >> 1;           /* index into disp */
     if ((iodispR[idx] && dibp->rd &&                    /* conflict? */
@@ -411,11 +411,15 @@ for (i = 0; i < (int32) dibp->lnt; i = i + 2) {         /* create entries */
                                         "Device %s address conflict with %s at 0%o\n",
                              sim_dname (dptr), cdname, (int)dibp->ba);
         }
-    if (dibp->rd)                                       /* set rd dispatch */
-        iodispR[idx] = dibp->rd;
-    if (dibp->wr)                                       /* set wr dispatch */
-        iodispW[idx] = dibp->wr;
-    iodibp[idx] = dibp;                                 /* remember DIB */
+    if ((dibp->rd == NULL) && (dibp->wr == NULL) && (dibp->vnum == 0)) 
+        iodibp[idx] = NULL;                         /* deregister DIB */
+    else {
+        if (dibp->rd)
+            iodispR[idx] = dibp->rd;                /* set rd dispatch */
+        if (dibp->wr)
+            iodispW[idx] = dibp->wr;                /* set wr dispatch */
+        iodibp[idx] = dibp;                         /* remember DIB */
+        }
     }
 return SCPE_OK;
 }
@@ -430,13 +434,16 @@ DIB *dibp;
 uint32 maxaddr, maxname, maxdev;
 int32 maxvec, vecwid;
 int32 brbase = 0;
+uint32 rdx = DEV_RDX;
 char valbuf[40];
+const char *vec_fmt = NULL;
+char vec_fmt_buf[16];
 
-#if defined DEV_RDX && DEV_RDX == 16
-#define VEC_FMT "X"
-#else
-#define VEC_FMT "o"
-#endif
+if ((sim_switches & SWMASK('O')) || (sim_switch_number == 8))
+    rdx = 8;
+if ((sim_switches & SWMASK('H')) || (sim_switch_number == 16))
+    rdx = 16;
+vec_fmt = (rdx == 16) ? "X" : "o";
 
 if (build_dib_tab ())                                   /* build IO page */
     return SCPE_OK;
@@ -453,12 +460,7 @@ for (i = 0, dibp = NULL; i < (IOPAGESIZE >> 1); i++) {  /* loop thru entries */
     size_t l;
     if (iodibp[i] && (iodibp[i] != dibp)) {             /* new block? */
         dibp = iodibp[i];                               /* DIB for block */
-        for (j = 0, dptr = NULL; sim_devices[j] != NULL; j++) {
-            if (((DIB*) sim_devices[j]->ctxt) == dibp) {
-                dptr = sim_devices[j];                  /* locate device */
-                break;
-                }                                       /* end if */
-            }                                           /* end for j */
+        dptr = dibp->dptr;
         if ((dibp->ba+ dibp->lnt - 1) > maxaddr)
             maxaddr = dibp->ba+ dibp->lnt - 1;
         if (dibp->vec > maxvec)
@@ -472,8 +474,9 @@ for (i = 0, dibp = NULL; i < (IOPAGESIZE >> 1); i++) {  /* loop thru entries */
             maxdev = j;
         }                                               /* end if */
     }                                                   /* end for i */
-maxaddr = fprint_val (NULL, (t_value) dibp->ba, DEV_RDX, 32, PV_LEFT);
-sprintf (valbuf, "%03" VEC_FMT, maxvec);
+maxaddr = fprint_val (NULL, (t_value) dibp->ba, rdx, 32, PV_LEFT);
+sprintf (vec_fmt_buf, "%s%s", "%03", vec_fmt);
+sprintf (valbuf, vec_fmt_buf, maxvec);
 vecwid = maxvec = (int32) strlen (valbuf);
 if (vecwid < 3)
     vecwid = 3;
@@ -522,25 +525,23 @@ fputc ('\n', st);
 for (i = 0, dibp = NULL; i < (IOPAGESIZE >> 1); i++) {  /* loop thru entries */
     if (iodibp[i] && (iodibp[i] != dibp)) {             /* new block? */
         dibp = iodibp[i];                               /* DIB for block */
-        for (j = 0, dptr = NULL; sim_devices[j] != NULL; j++) {
-            if (((DIB*) sim_devices[j]->ctxt) == dibp) {
-                dptr = sim_devices[j];                  /* locate device */
-                break;
-                }                                       /* end if */
-            }                                           /* end for j */
-        fprint_val (st, (t_value) dibp->ba, DEV_RDX, 32, PV_LEFT);
+        dptr = dibp->dptr;                              /* locate device */
+        fprint_val (st, (t_value) dibp->ba, rdx, 32, PV_LEFT);
         fprintf (st, " - ");
-        fprint_val (st, (t_value) dibp->ba + dibp->lnt - 1, DEV_RDX, 32, PV_LEFT);
+        fprint_val (st, (t_value) dibp->ba + dibp->lnt - 1, rdx, 32, PV_LEFT);
         fprintf (st, "%c ",                        /* print block entry */
             (dibp->ba < IOPAGEBASE + AUTO_CSRBASE + AUTO_CSRMAX)? '*': ' ');
         if (dibp->vec == 0)
             fprintf (st, "%*s", ((vecwid*2)+1+1), " ");
         else {
-            fprintf (st, "%0*" VEC_FMT, vecwid, dibp->vec);
-            if (dibp->vnum > 1)
-                fprintf (st, "-%0*" VEC_FMT, vecwid, dibp->vec + (4 *
+            sprintf (vec_fmt_buf, "%s%s", "%0*", vec_fmt);
+            fprintf (st, vec_fmt_buf, vecwid, dibp->vec);
+            if (dibp->vnum > 1) {
+                sprintf (vec_fmt_buf, "%s%s", "-%0*", vec_fmt);
+                fprintf (st, vec_fmt_buf, vecwid, dibp->vec + (4 *
                 (dibp->ulnt? dibp->lnt/dibp->ulnt:
                                             (dptr? dptr->numunits: 1)) * dibp->vnum) - 4);
+                }
             else
                 fprintf (st, " %*s", vecwid, " ");
             fprintf (st, "%1s", (dibp->vnum >= AUTO_VECBASE)? "*": " ");
@@ -555,7 +556,6 @@ for (i = 0, dibp = NULL; i < (IOPAGESIZE >> 1); i++) {  /* loop thru entries */
         }                                               /* end if */
     }                                                   /* end for i */
 return SCPE_OK;
-#undef VEC_FMT
 }
 
 /* Autoconfiguration
@@ -783,6 +783,12 @@ AUTO_CON auto_tab[] = {/*c  #v  am vm  fxa   fxv */
     { { NULL },          1,  2,  4, 8 },                /* DTC05, DECvoice */
     { { NULL },          1,  2,  8, 8 },                /* KWV32 (DSV11) */
     { { NULL },          1,  1, 64, 4 },                /* QZA */
+    { { "CH" },          1,  1,  0, 0, 
+        {04140}, {0270} },                              /* CH11 - CHAOS Net - fx CSR, fx VEC */
+    { { "NG" },          1,  1,  0, 0, 
+        {04040}, {0270} },                              /* NG - vector display */
+    { { "DAZ" },         1,  1,  0, 0, 
+        {00104} },                                      /* DAZ */
     { { NULL },         -1 }                            /* end table */
 };
 

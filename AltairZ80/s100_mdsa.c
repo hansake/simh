@@ -16,10 +16,6 @@
 #include "altairz80_defs.h"
 #include "sim_imd.h"
 
-#if defined (_WIN32)
-#include <windows.h>
-#endif
-
 #ifdef DBG_MSG
 #define DBG_PRINT(args) printf args
 #else
@@ -111,7 +107,7 @@ static uint32 stepCleared = TRUE;   /* true when step bit has returned to zero *
 
 /* MDS-AD Controller Subcases */
 #define MDSA_READ_ROM0     0
-#define MDSA_READ_ROM1     1    
+#define MDSA_READ_ROM1     1
 #define MDSA_WRITE_DATA    2
 #define MDSA_CTLR_COMMAND  3
 
@@ -372,7 +368,7 @@ static uint8 MDSA_Read(const uint32 Addr)
     uint8 driveNum;
     MDSA_DRIVE_INFO *pDrive;
     int32 rtn;
-    
+
     cData = 0;
     pDrive = &mdsa_info->drive[mdsa_info->currentDrive];
     switch( (Addr & 0x300) >> 8 ) {

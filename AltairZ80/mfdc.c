@@ -48,10 +48,6 @@
 #include "altairz80_defs.h"
 #include "sim_imd.h"
 
-#if defined (_WIN32)
-#include <windows.h>
-#endif
-
 #ifdef DBG_MSG
 #define DBG_PRINT(args) sim_printf args
 #else
@@ -241,7 +237,7 @@ static t_stat mfdc_reset(DEVICE *dptr)
 static t_stat mfdc_attach(UNIT *uptr, CONST char *cptr)
 {
     t_stat r;
-    unsigned int i = 0;
+    int32 i = 0;
 
     r = attach_unit(uptr, cptr);    /* attach unit  */
     if ( r != SCPE_OK)              /* error?       */

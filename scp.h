@@ -37,6 +37,9 @@
 #ifndef SIM_SCP_H_
 #define SIM_SCP_H_     0
 
+#include "sim_fio.h"
+#include <sys/stat.h>
+
 #ifdef  __cplusplus
 extern "C" {
 #endif
@@ -92,6 +95,9 @@ t_stat dir_cmd (int32 flg, CONST char *cptr);
 t_stat type_cmd (int32 flg, CONST char *cptr);
 t_stat delete_cmd (int32 flg, CONST char *cptr);
 t_stat copy_cmd (int32 flg, CONST char *cptr);
+t_stat rename_cmd (int32 flg, CONST char *cptr);
+t_stat mkdir_cmd (int32 flg, CONST char *cptr);
+t_stat rmdir_cmd (int32 flg, CONST char *cptr);
 t_stat brk_cmd (int32 flag, CONST char *ptr);
 t_stat do_cmd (int32 flag, CONST char *ptr);
 t_stat goto_cmd (int32 flag, CONST char *ptr);
@@ -110,6 +116,7 @@ t_stat spawn_cmd (int32 flag, CONST char *ptr);
 t_stat echo_cmd (int32 flag, CONST char *ptr);
 t_stat echof_cmd (int32 flag, CONST char *ptr);
 t_stat debug_cmd (int32 flag, CONST char *ptr);
+t_stat runlimit_cmd (int32 flag, CONST char *ptr);
 
 /* Allow compiler to help validate printf style format arguments */
 #if !defined __GNUC__
@@ -135,6 +142,7 @@ t_stat _sim_activate_after_abs (UNIT *uptr, double usecs_walltime);
 t_stat sim_cancel (UNIT *uptr);
 t_bool sim_is_active (UNIT *uptr);
 int32 sim_activate_time (UNIT *uptr);
+int32 _sim_activate_queue_time (UNIT *uptr);
 int32 _sim_activate_time (UNIT *uptr);
 double sim_activate_time_usecs (UNIT *uptr);
 t_stat sim_run_boot_prep (int32 flag);
@@ -163,9 +171,12 @@ int sim_islower (int c);
 #ifdef islower
 #undef islower
 #endif
-#ifndef IN_SCP_C
 #define islower(chr) sim_islower (chr)
+int sim_isupper (int c);
+#ifdef isupper
+#undef isupper
 #endif
+#define isupper(chr) sim_isupper (chr)
 int sim_isalpha (int c);
 #ifdef isalpha
 #undef isalpha
@@ -184,9 +195,7 @@ int sim_isdigit (int c);
 #ifdef isdigit
 #undef isdigit
 #endif
-#ifndef IN_SCP_C
 #define isdigit(chr) sim_isdigit (chr)
-#endif
 int sim_isgraph (int c);
 #ifdef isgraph
 #undef isgraph
@@ -227,7 +236,16 @@ size_t sim_strlcpy (char *dst, const char *src, size_t size);
 #ifndef strcasecmp
 #define strcasecmp(str1, str2) sim_strcasecmp ((str1), (str2))
 #endif
+void sim_srand (unsigned int seed);
+int sim_rand (void);
+#ifdef RAND_MAX
+#undef RAND_MAX
+#endif
+#define RAND_MAX 2147483646
+#define rand sim_rand
+#define srand(seed) sim_srand(seed)
 CONST char *get_sim_opt (int32 opt, CONST char *cptr, t_stat *st);
+CONST char *get_sim_sw (CONST char *cptr);
 const char *put_switches (char *buf, size_t bufsize, uint32 sw);
 CONST char *get_glyph (const char *iptr, char *optr, char mchar);
 CONST char *get_glyph_nc (const char *iptr, char *optr, char mchar);
@@ -236,10 +254,12 @@ CONST char *get_glyph_cmd (const char *iptr, char *optr);
 t_value get_uint (const char *cptr, uint32 radix, t_value max, t_stat *status);
 CONST char *get_range (DEVICE *dptr, CONST char *cptr, t_addr *lo, t_addr *hi,
     uint32 rdx, t_addr max, char term);
+t_stat sim_set_environment (int32 flag, CONST char *cptr);
 t_stat sim_decode_quoted_string (const char *iptr, uint8 *optr, uint32 *osize);
 char *sim_encode_quoted_string (const uint8 *iptr, uint32 size);
 void fprint_buffer_string (FILE *st, const uint8 *buf, uint32 size);
 t_value strtotv (CONST char *cptr, CONST char **endptr, uint32 radix);
+t_svalue strtotsv (CONST char *inptr, CONST char **endptr, uint32 radix);
 int Fprintf (FILE *f, const char *fmt, ...) GCC_FMT_ATTR(2, 3);
 /* Use scp.c provided fprintf function */
 #define fprintf Fprintf
@@ -290,9 +310,11 @@ t_stat sim_exp_show (FILE *st, CONST EXPECT *exp, const char *match);
 t_stat sim_exp_showall (FILE *st, const EXPECT *exp);
 t_stat sim_exp_check (EXPECT *exp, uint8 data);
 CONST char *match_ext (CONST char *fnam, const char *ext);
+int sim_cmp_string (const char *s1, const char *s2);
 t_stat show_version (FILE *st, DEVICE *dptr, UNIT *uptr, int32 flag, CONST char *cptr);
 t_stat set_dev_debug (DEVICE *dptr, UNIT *uptr, int32 flag, CONST char *cptr);
 t_stat show_dev_debug (FILE *st, DEVICE *dptr, UNIT *uptr, int32 flag, CONST char *cptr);
+t_stat sim_add_debug_flags (DEVICE *dptr, DEBTAB *debflags);
 const char *sim_error_text (t_stat stat);
 t_stat sim_string_to_stat (const char *cptr, t_stat *cond);
 t_stat sim_cancel_step (void);
@@ -308,12 +330,18 @@ void sim_debug_bits (uint32 dbits, DEVICE* dptr, BITFIELD* bitdefs,
 #define CANT_USE_MACRO_VA_ARGS 1
 #endif
 #ifdef CANT_USE_MACRO_VA_ARGS
-#define _sim_debug sim_debug
+#define _sim_debug_device sim_debug
 void sim_debug (uint32 dbits, DEVICE* dptr, const char *fmt, ...) GCC_FMT_ATTR(3, 4);
+#define _sim_debug_unit sim_debug_unit
+void sim_debug_unit (uint32 dbits, DEVICE* dptr, const char *fmt, ...) GCC_FMT_ATTR(3, 4);
 #else
-void _sim_debug (uint32 dbits, DEVICE* dptr, const char *fmt, ...) GCC_FMT_ATTR(3, 4);
-#define sim_debug(dbits, dptr, ...) do { if (sim_deb && dptr && ((dptr)->dctrl & (dbits))) _sim_debug (dbits, dptr, __VA_ARGS__);} while (0)
+void _sim_debug_unit (uint32 dbits, UNIT *uptr, const char* fmt, ...) GCC_FMT_ATTR(3, 4);
+void _sim_debug_device (uint32 dbits, DEVICE* dptr, const char* fmt, ...) GCC_FMT_ATTR(3, 4);
+#define sim_debug(dbits, dptr, ...) do { if (sim_deb && dptr && ((dptr)->dctrl & (dbits))) _sim_debug_device (dbits, dptr, __VA_ARGS__);} while (0)
+#define sim_debug_unit(dbits, uptr, ...) do { if (sim_deb && uptr && (((uptr)->dctrl | (uptr)->dptr->dctrl) & (dbits))) _sim_debug_unit (dbits, uptr, __VA_ARGS__);} while (0)
 #endif
+void sim_flush_buffered_files (void);
+
 void fprint_stopped_gen (FILE *st, t_stat v, REG *pc, DEVICE *dptr);
 #define SCP_HELP_FLAT   (1u << 31)       /* Force flat help when prompting is not possible */
 #define SCP_HELP_ONECMD (1u << 30)       /* Display one topic, do not prompt */
@@ -343,6 +371,10 @@ extern FILEREF *sim_log_ref;                            /* log file file referen
 extern FILE *sim_deb;                                   /* debug file */
 extern FILEREF *sim_deb_ref;                            /* debug file file reference */
 extern int32 sim_deb_switches;                          /* debug display flags */
+extern size_t sim_deb_buffer_size;                      /* debug memory buffer size */
+extern char *sim_deb_buffer;                            /* debug memory buffer */
+extern size_t sim_debug_buffer_offset;                  /* debug memory buffer insertion offset */
+extern size_t sim_debug_buffer_inuse;                   /* debug memory buffer inuse count */
 extern struct timespec sim_deb_basetime;                /* debug base time for relative time output */
 extern DEVICE **sim_internal_devices;
 extern uint32 sim_internal_device_count;
@@ -358,7 +390,8 @@ extern uint32 sim_brk_dflt;
 extern uint32 sim_brk_summ;
 extern uint32 sim_brk_match_type;
 extern t_addr sim_brk_match_addr;
-extern BRKTYPTAB *sim_brk_type_desc;                      /* type descriptions */
+extern BRKTYPTAB *sim_brk_type_desc;                    /* type descriptions */
+extern const char *sim_prog_name;                       /* executable program name */
 extern FILE *stdnul;
 extern t_bool sim_asynch_enabled;
 #if defined(SIM_ASYNCH_IO)
@@ -369,6 +402,7 @@ void sim_aio_activate (ACTIVATE_API caller, UNIT *uptr, int32 event_time);
 /* VM interface */
 
 extern char sim_name[64];
+extern const char *sim_vm_release;
 extern DEVICE *sim_devices[];
 extern REG *sim_PC;
 extern const char *sim_stop_messages[SCPE_BASE];
@@ -393,6 +427,30 @@ extern t_addr (*sim_vm_parse_addr) (DEVICE *dptr, CONST char *cptr, CONST char *
 extern t_bool (*sim_vm_fprint_stopped) (FILE *st, t_stat reason);
 extern t_value (*sim_vm_pc_value) (void);
 extern t_bool (*sim_vm_is_subroutine_call) (t_addr **ret_addrs);
+extern const char **sim_clock_precalibrate_commands;
+
+
+/* Core SCP libraries can potentially have unit test routines.
+   These defines help implement consistent unit test functionality */
+
+#define SIM_TEST_INIT                                           \
+        int test_stat;                                          \
+        const char *sim_test;                                   \
+        jmp_buf sim_test_env;                                   \
+        if ((test_stat = setjmp (sim_test_env))) {              \
+            sim_printf ("Error: %d - '%s' processing: %s\n",    \
+                        test_stat, sim_error_text(test_stat),   \
+                        sim_test);                              \
+            return test_stat;                                   \
+            }
+#define SIM_TEST(_stat)                                         \
+        do {                                                    \
+            if (SCPE_OK != (test_stat = (_stat))) {             \
+                sim_test = #_stat;                              \
+                longjmp (sim_test_env, test_stat);              \
+                }                                               \
+            } while (0)
+
 
 #ifdef  __cplusplus
 }
