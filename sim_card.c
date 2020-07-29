@@ -791,7 +791,7 @@ _sim_parse_card(UNIT *uptr, DEVICE *dptr, struct _card_buffer *buf, uint16 (*ima
         for (col = i = 0; i < 160;) {
             temp |= (uint16)(buf->buffer[i] & 0xff);
             (*image)[col] = (buf->buffer[i++] >> 4) & 0xF;
-            (*image)[col++] |= ((uint16)buf->buffer[i++] & 0xf) << 4;
+            (*image)[col++] |= ((uint16)buf->buffer[i++] & 0xff) << 4;
         }
         /* Check if format error */
         if (temp & 0xF)
@@ -931,9 +931,9 @@ _sim_read_deck(UNIT * uptr, int eof)
         if (data->hopper_cards >= data->hopper_size) {
             data->hopper_size += DECK_SIZE;
             data->images = (uint16 (*)[1][80])realloc(data->images,
-                       data->hopper_size * sizeof(*(data->images)));
+                       (size_t)data->hopper_size * sizeof(*(data->images)));
             memset(&data->images[data->hopper_cards], 0,
-                       (data->hopper_size - data->hopper_cards) *
+                       (size_t)(data->hopper_size - data->hopper_cards) *
                              sizeof(*(data->images)));
         }
 
@@ -961,9 +961,9 @@ _sim_read_deck(UNIT * uptr, int eof)
           if (data->hopper_cards >= data->hopper_size) {
               data->hopper_size += DECK_SIZE;
               data->images = (uint16 (*)[1][80])realloc(data->images,
-                         data->hopper_size * sizeof(*(data->images)));
+                         (size_t)data->hopper_size * sizeof(*(data->images)));
               memset(&data->images[data->hopper_cards], 0,
-                         (data->hopper_size - data->hopper_cards) *
+                         (size_t)(data->hopper_size - data->hopper_cards) *
                                sizeof(*(data->images)));
           }
 

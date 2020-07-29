@@ -32,6 +32,14 @@
 # installed, gmake should be invoked with LPATH=/usr/lib:/usr/local/lib 
 # defined (adjusted as needed depending on where they may be installed).
 #
+# In the unlikely event that someone wants to build network capable 
+# simulators without networking support, invoking GNU make with 
+# NONETWORK=1 will do the trick.
+#
+# By default, video support is enabled if the SDL/SDL2 development
+# headers and libraries are available.  To force a build without video
+# support, invoke GNU make with NOVIDEO=1.
+#
 # The default build will build compiler optimized binaries.
 # If debugging is desired, then GNU make can be invoked with
 # DEBUG=1 on the command line.
@@ -65,12 +73,6 @@
 #
 # Internal ROM support can be disabled if GNU make is invoked with
 # DONT_USE_ROMS=1 on the command line.
-#
-# The use of pthreads for various things can be disabled if GNU make is 
-# invoked with NOPTHREADS=1 on the command line.
-#
-# Asynchronous I/O support can be disabled if GNU make is invoked with
-# NOASYNCH=1 on the command line.
 #
 # For linting (or other code analyzers) make may be invoked similar to:
 #
@@ -107,11 +109,16 @@ ifneq (,$(findstring besm6,${MAKECMDGOALS}))
   VIDEO_USEFUL = true
   BESM6_BUILD = true
 endif
-# building the KA10 needs video support
+# building the Imlac needs video support
+ifneq (,$(findstring imlac,${MAKECMDGOALS}))
+  VIDEO_USEFUL = true
+endif
+# building the PDP6, KA10 or KI10 needs video support
 ifneq (,$(or $(findstring pdp6,${MAKECMDGOALS}),$(findstring pdp10-ka,${MAKECMDGOALS}),$(findstring pdp10-ki,${MAKECMDGOALS})))
   VIDEO_USEFUL = true
 endif
-ifneq (,$(or $(findstring pdp10-ka,${MAKECMDGOALS}),$(findstring pdp10-ki,${MAKECMDGOALS})))
+# building the KA10, KI10 or KL10 networking can be used.
+ifneq (,$(or $(findstring pdp10-ka,${MAKECMDGOALS}),$(findstring pdp10-ki,${MAKECMDGOALS},$(findstring pdp10-kl,${MAKECMDGOALS}))))
   NETWORK_USEFUL = true
 endif
 # building the PDP-7 needs video support
@@ -142,25 +149,35 @@ else
     BESM6_BUILD = true
   endif
 endif
-find_exe = $(abspath $(strip $(firstword $(foreach dir,$(strip $(subst :, ,${PATH})),$(wildcard $(dir)/$(1))))))
-find_lib = $(abspath $(strip $(firstword $(foreach dir,$(strip ${LIBPATH}),$(wildcard $(dir)/lib$(1).${LIBEXT})))))
-find_include = $(abspath $(strip $(firstword $(foreach dir,$(strip ${INCPATH}),$(wildcard $(dir)/$(1).h)))))
-ifneq (0,$(TESTS))
-  find_test = $(abspath $(wildcard $(1)/tests/$(2)_test.ini))
-  TESTING_FEATURES = - Per simulator tests will be run
-else
-  TESTING_FEATURES = - Per simulator tests will be skipped
+# someone may want to explicitly build simulators without network support
+ifneq ($(NONETWORK),)
+  NETWORK_USEFUL =
+endif
+# ... or without video support
+ifneq ($(NOVIDEO),)
+  VIDEO_USEFUL =
 endif
 ifneq ($(findstring Windows,${OS}),)
   ifeq ($(findstring .exe,${SHELL}),.exe)
     # MinGW
     WIN32 := 1
+    # Tests don't run under MinGW
+    TESTS := 0
   else # Msys or cygwin
     ifeq (MINGW,$(findstring MINGW,$(shell uname)))
       $(info *** This makefile can not be used with the Msys bash shell)
       $(error Use build_mingw.bat ${MAKECMDGOALS} from a Windows command prompt)
     endif
   endif
+endif
+find_exe = $(abspath $(strip $(firstword $(foreach dir,$(strip $(subst :, ,${PATH})),$(wildcard $(dir)/$(1))))))
+find_lib = $(abspath $(strip $(firstword $(foreach dir,$(strip ${LIBPATH}),$(wildcard $(dir)/lib$(1).${LIBEXT})))))
+find_include = $(abspath $(strip $(firstword $(foreach dir,$(strip ${INCPATH}),$(wildcard $(dir)/$(1).h)))))
+ifneq (0,$(TESTS))
+  find_test = RegisterSanityCheck $(abspath $(wildcard $(1)/tests/$(2)_test.ini)) </dev/null
+  TESTING_FEATURES = - Per simulator tests will be run
+else
+  TESTING_FEATURES = - Per simulator tests will be skipped
 endif
 ifeq (${WIN32},)  #*nix Environments (&& cygwin)
   ifeq (${GCC},)
@@ -245,17 +262,17 @@ ifeq (${WIN32},)  #*nix Environments (&& cygwin)
       NEED_COMMIT_ID = need-commit-id
     endif
     ifeq (need-commit-id,$(NEED_COMMIT_ID))
+      ifneq (,$(shell git update-index --refresh --))
+        GIT_EXTRA_FILES=+uncommitted-changes
+      endif
       isodate=$(shell git log -1 --pretty="%ai"|sed -e 's/ /T/'|sed -e 's/ //')
-      $(shell git log -1 --pretty="SIM_GIT_COMMIT_ID %H%nSIM_GIT_COMMIT_TIME $(isodate)" >.git-commit-id)
+      $(shell git log -1 --pretty="SIM_GIT_COMMIT_ID %H$(GIT_EXTRA_FILES)%nSIM_GIT_COMMIT_TIME $(isodate)" >.git-commit-id)
     endif
   endif
   LTO_EXCLUDE_VERSIONS = 
   PCAPLIB = pcap
   ifeq (agcc,$(findstring agcc,${GCC})) # Android target build?
-    OS_CCDEFS = -D_GNU_SOURCE
-    ifeq (,$(NOASYNCH))
-      OS_CCDEFS += -DSIM_ASYNCH_IO 
-    endif
+    OS_CCDEFS = -D_GNU_SOURCE -DSIM_ASYNCH_IO 
     OS_LDFLAGS = -lm
   else # Non-Android (or Native Android) Builds
     ifeq (,$(INCLUDES)$(LIBRARIES))
@@ -462,38 +479,25 @@ ifeq (${WIN32},)  #*nix Environments (&& cygwin)
     OS_LDFLAGS += -lrt
     $(info using librt: $(call find_lib,rt))
   endif
-  ifneq (,$(NOPTHREADS))
-    OS_CCDEFS += -DDONT_USE_READER_THREAD
-  else
-    ifneq (,$(call find_include,pthread))
+  ifneq (,$(call find_include,pthread))
+    ifneq (,$(call find_lib,pthread))
+      OS_CCDEFS += -DUSE_READER_THREAD -DSIM_ASYNCH_IO 
+      OS_LDFLAGS += -lpthread
+      $(info using libpthread: $(call find_lib,pthread) $(call find_include,pthread))
+    else
+      LIBEXTSAVE := ${LIBEXT}
+      LIBEXT = a
       ifneq (,$(call find_lib,pthread))
-        OS_CCDEFS += -DUSE_READER_THREAD
-        ifeq (,$(NOASYNCH))
-          OS_CCDEFS += -DSIM_ASYNCH_IO 
-        endif
+        OS_CCDEFS += -DUSE_READER_THREAD -DSIM_ASYNCH_IO 
         OS_LDFLAGS += -lpthread
         $(info using libpthread: $(call find_lib,pthread) $(call find_include,pthread))
       else
-        LIBEXTSAVE := ${LIBEXT}
-        LIBEXT = a
-        ifneq (,$(call find_lib,pthread))
-          OS_CCDEFS += -DUSE_READER_THREAD
-          ifeq (,$(NOASYNCH))
-            OS_CCDEFS += -DSIM_ASYNCH_IO 
-          endif
-          OS_LDFLAGS += -lpthread
-          $(info using libpthread: $(call find_lib,pthread) $(call find_include,pthread))
-        else
-          ifneq (,$(findstring Haiku,$(OSTYPE)))
-            OS_CCDEFS += -DUSE_READER_THREAD
-            ifeq (,$(NOASYNCH))
-              OS_CCDEFS += -DSIM_ASYNCH_IO 
-            endif
-            $(info using libpthread: $(call find_include,pthread))
-          endif
+        ifneq (,$(findstring Haiku,$(OSTYPE)))
+          OS_CCDEFS += -DUSE_READER_THREAD -DSIM_ASYNCH_IO 
+          $(info using libpthread: $(call find_include,pthread))
         endif
-        LIBEXT = $(LIBEXTSAVE)
       endif
+      LIBEXT = $(LIBEXTSAVE)
     endif
   endif
   # Find PCRE RegEx library.
@@ -600,36 +604,12 @@ ifeq (${WIN32},)  #*nix Environments (&& cygwin)
           DISPLAYVT = ${DISPLAYD}/vt11.c
           DISPLAY340 = ${DISPLAYD}/type340.c
           DISPLAYNG = ${DISPLAYD}/ng.c
+          DISPLAYIII = ${DISPLAYD}/iii.c
+          DISPLAYIMLAC = ${DISPLAYD}/imlac.c
           DISPLAY_OPT += -DUSE_DISPLAY $(VIDEO_CCDEFS) $(VIDEO_LDFLAGS)
           $(info using libSDL2: $(call find_include,SDL2/SDL))
           ifeq (Darwin,$(OSTYPE))
             VIDEO_CCDEFS += -DSDL_MAIN_AVAILABLE
-          endif
-        endif
-      endif
-    else
-      ifneq (,$(call find_include,SDL/SDL))
-        ifneq (,$(call find_lib,SDL))
-          ifneq (,$(findstring Haiku,$(OSTYPE)))
-            ifneq (,$(shell which sdl-config))
-              SDLX_CONFIG = sdl-config
-            endif
-          else
-            SDLX_CONFIG = $(realpath $(dir $(call find_include,SDL/SDL))../../bin/sdl-config)
-          endif
-          ifneq (,$(SDLX_CONFIG))
-            VIDEO_CCDEFS += -DHAVE_LIBSDL -DUSE_SIM_VIDEO `$(SDLX_CONFIG) --cflags`
-            VIDEO_LDFLAGS += `$(SDLX_CONFIG) --libs`
-            VIDEO_FEATURES = - video capabilities provided by libSDL (Simple Directmedia Layer)
-            DISPLAYL = ${DISPLAYD}/display.c $(DISPLAYD)/sim_ws.c
-            DISPLAYVT = ${DISPLAYD}/vt11.c
-            DISPLAY340 = ${DISPLAYD}/type340.c
-            DISPLAYNG = ${DISPLAYD}/ng.c
-            DISPLAY_OPT += -DUSE_DISPLAY $(VIDEO_CCDEFS) $(VIDEO_LDFLAGS)
-            $(info using libSDL: $(call find_include,SDL/SDL))
-            ifeq (Darwin,$(OSTYPE))
-              VIDEO_CCDEFS += -DSDL_MAIN_AVAILABLE
-            endif
           endif
         endif
       endif
@@ -655,14 +635,12 @@ ifeq (${WIN32},)  #*nix Environments (&& cygwin)
         endif
       else
         ifneq (,$(and $(findstring Linux,$(OSTYPE)),$(call find_exe,apt-get)))
-          $(info *** Info *** Install the development components of libSDL or libSDL2)
-          $(info *** Info *** packaged for your operating system distribution for)
-          $(info *** Info *** your Linux system:)
+          $(info *** Info *** Install the development components of libSDL2 packaged for)
+          $(info *** Info *** your operating system distribution for your Linux)
+          $(info *** Info *** system:)
           $(info *** Info ***        $$ sudo apt-get install libsdl2-dev libpng-dev)
-          $(info *** Info ***    or)
-          $(info *** Info ***        $$ sudo apt-get install libsdl-dev)
         else
-          $(info *** Info *** Install the development components of libSDL packaged by your)
+          $(info *** Info *** Install the development components of libSDL2 packaged by your)
           $(info *** Info *** operating system distribution and rebuild your simulator to)
           $(info *** Info *** enable this extra functionality.)
         endif
@@ -871,7 +849,7 @@ ifeq (${WIN32},)  #*nix Environments (&& cygwin)
         NETWORK_CCDEFS += -DUSE_NETWORK
       endif
     endif
-    ifeq (bsdtuntap,$(shell if ${TEST} -e /usr/include/net/if_tun.h -o -e /Library/Extensions/tap.kext; then echo bsdtuntap; fi))
+    ifeq (bsdtuntap,$(shell if ${TEST} -e /usr/include/net/if_tun.h -o -e /Library/Extensions/tap.kext -o -e /Applications/Tunnelblick.app/Contents/Resources/tap-notarized.kext; then echo bsdtuntap; fi))
       # Provide support for Tap networking on BSD platforms (including OS X)
       NETWORK_CCDEFS += -DHAVE_TAP_NETWORK -DHAVE_BSDTUNTAP
       NETWORK_LAN_FEATURES += TAP
@@ -956,17 +934,11 @@ else
   $(info include paths are: ${INCPATH})
   # Give preference to any MinGW provided threading (if available)
   ifneq (,$(call find_include,pthread))
-    PTHREADS_CCDEFS = -DUSE_READER_THREAD
-    ifeq (,$(NOASYNCH))
-      PTHREADS_CCDEFS += -DSIM_ASYNCH_IO 
-    endif
+    PTHREADS_CCDEFS = -DUSE_READER_THREAD -DSIM_ASYNCH_IO
     PTHREADS_LDFLAGS = -lpthread
   else
     ifeq (pthreads,$(shell if exist ..\windows-build\pthreads\Pre-built.2\include\pthread.h echo pthreads))
-      PTHREADS_CCDEFS = -DUSE_READER_THREAD -DPTW32_STATIC_LIB -D_POSIX_C_SOURCE -I../windows-build/pthreads/Pre-built.2/include
-      ifeq (,$(NOASYNCH))
-        PTHREADS_CCDEFS += -DSIM_ASYNCH_IO 
-      endif
+      PTHREADS_CCDEFS = -DUSE_READER_THREAD -DPTW32_STATIC_LIB -D_POSIX_C_SOURCE -I../windows-build/pthreads/Pre-built.2/include -DSIM_ASYNCH_IO
       PTHREADS_LDFLAGS = -lpthreadGC2 -L..\windows-build\pthreads\Pre-built.2\lib
     endif
   endif
@@ -1030,7 +1002,10 @@ else
     endif
     ifeq (commit-id-exists,$(shell if exist .git-commit-id echo commit-id-exists))
       CURRENT_GIT_COMMIT_ID=$(shell for /F "tokens=2" %%i in ("$(shell findstr /C:"SIM_GIT_COMMIT_ID" .git-commit-id)") do echo %%i)
-      ACTUAL_GIT_COMMIT_ID=$(strip $(shell git log -1 --pretty=%H))
+      ifneq (, $(shell git update-index --refresh --))
+        ACTUAL_GIT_COMMIT_EXTRAS=+uncommitted-changes
+      endif
+      ACTUAL_GIT_COMMIT_ID=$(strip $(shell git log -1 --pretty=%H))$(ACTUAL_GIT_COMMIT_EXTRAS)
       ifneq ($(CURRENT_GIT_COMMIT_ID),$(ACTUAL_GIT_COMMIT_ID))
         NEED_COMMIT_ID = need-commit-id
         # make sure that the invalidly formatted .git-commit-id file wasn't generated
@@ -1043,10 +1018,13 @@ else
       NEED_COMMIT_ID = need-commit-id
     endif
     ifeq (need-commit-id,$(NEED_COMMIT_ID))
-      commit_id=$(shell git log -1 --pretty=%H)
+      ifneq (, $(shell git update-index --refresh --))
+        ACTUAL_GIT_COMMIT_EXTRAS=+uncommitted-changes
+      endif
+      ACTUAL_GIT_COMMIT_ID=$(strip $(shell git log -1 --pretty=%H))$(ACTUAL_GIT_COMMIT_EXTRAS)
       isodate=$(shell git log -1 --pretty=%ai)
       commit_time=$(word 1,$(isodate))T$(word 2,$(isodate))$(word 3,$(isodate))
-      $(shell echo SIM_GIT_COMMIT_ID $(commit_id)>.git-commit-id)
+      $(shell echo SIM_GIT_COMMIT_ID $(ACTUAL_GIT_COMMIT_ID)>.git-commit-id)
       $(shell echo SIM_GIT_COMMIT_TIME $(commit_time)>>.git-commit-id)
     endif
   endif
@@ -1157,10 +1135,14 @@ else
   ifneq (3,$(GCC_MAJOR_VERSION))
     ifeq (,$(GCC_OPTIMIZERS_CMD))
       GCC_OPTIMIZERS_CMD = ${GCC} --help=optimizers
+      GCC_COMMON_CMD = ${GCC} --help=common
     endif
   endif
   ifneq (,$(GCC_OPTIMIZERS_CMD))
     GCC_OPTIMIZERS = $(shell $(GCC_OPTIMIZERS_CMD))
+  endif
+  ifneq (,$(GCC_COMMON_CMD))
+    GCC_OPTIMIZERS += $(shell $(GCC_COMMON_CMD))
   endif
   ifneq (,$(findstring $(GCC_VERSION),$(LTO_EXCLUDE_VERSIONS)))
     NO_LTO = 1
@@ -1271,7 +1253,7 @@ ECLIPSE = ${NOVAD}/eclipse_cpu.c ${NOVAD}/eclipse_tt.c ${NOVAD}/nova_sys.c \
 	${NOVAD}/nova_dkp.c ${NOVAD}/nova_dsk.c ${NOVAD}/nova_lp.c \
 	${NOVAD}/nova_mta.c ${NOVAD}/nova_plt.c ${NOVAD}/nova_pt.c \
 	${NOVAD}/nova_clk.c ${NOVAD}/nova_tt1.c ${NOVAD}/nova_qty.c
-ECLIPSE_OPT = -I ${NOVAD} -DECLIPSE
+ECLIPSE_OPT = -I ${NOVAD} -DECLIPSE -DUSE_INT64
 
 
 PDP18BD = ${SIMHD}/PDP18B
@@ -1511,6 +1493,14 @@ PDP10 = ${PDP10D}/pdp10_fe.c ${PDP11D}/pdp11_dz.c ${PDP10D}/pdp10_cpu.c \
 PDP10_OPT = -DVM_PDP10 -DUSE_INT64 -I ${PDP10D} -I ${PDP11D} ${NETWORK_OPT}
 
 
+IMLACD = ${SIMHD}/imlac
+IMLAC = ${IMLACD}/imlac_sys.c ${IMLACD}/imlac_cpu.c \
+	${IMLACD}/imlac_dp.c ${IMLACD}/imlac_crt.c ${IMLACD}/imlac_kbd.c \
+	${IMLACD}/imlac_tty.c ${IMLACD}/imlac_pt.c ${IMLACD}/imlac_bel.c \
+	${DISPLAYL} ${DISPLAYIMLAC}
+IMLAC_OPT = -I ${IMLACD} ${DISPLAY_OPT}
+
+
 PDP8D = ${SIMHD}/PDP8
 PDP8 = ${PDP8D}/pdp8_cpu.c ${PDP8D}/pdp8_clk.c ${PDP8D}/pdp8_df.c \
 	${PDP8D}/pdp8_dt.c ${PDP8D}/pdp8_lp.c ${PDP8D}/pdp8_mt.c \
@@ -1530,16 +1520,23 @@ H316_OPT = -I ${H316D} -D VM_IMPTIP
 
 
 HP2100D = ${SIMHD}/HP2100
-HP2100 = ${HP2100D}/hp2100_stddev.c ${HP2100D}/hp2100_dp.c ${HP2100D}/hp2100_dq.c \
-	${HP2100D}/hp2100_dr.c ${HP2100D}/hp2100_lps.c ${HP2100D}/hp2100_ms.c \
-	${HP2100D}/hp2100_mt.c ${HP2100D}/hp2100_mux.c ${HP2100D}/hp2100_cpu.c \
-	${HP2100D}/hp2100_fp.c ${HP2100D}/hp2100_sys.c ${HP2100D}/hp2100_lpt.c \
-	${HP2100D}/hp2100_ipl.c ${HP2100D}/hp2100_ds.c ${HP2100D}/hp2100_cpu0.c \
-	${HP2100D}/hp2100_cpu1.c ${HP2100D}/hp2100_cpu2.c ${HP2100D}/hp2100_cpu3.c \
-	${HP2100D}/hp2100_cpu4.c ${HP2100D}/hp2100_cpu5.c ${HP2100D}/hp2100_cpu6.c \
-	${HP2100D}/hp2100_cpu7.c ${HP2100D}/hp2100_fp1.c ${HP2100D}/hp2100_baci.c \
-	${HP2100D}/hp2100_mpx.c ${HP2100D}/hp2100_pif.c ${HP2100D}/hp2100_di.c \
-	${HP2100D}/hp2100_di_da.c ${HP2100D}/hp2100_disclib.c
+HP2100 = ${HP2100D}/hp2100_baci.c ${HP2100D}/hp2100_cpu.c \
+        ${HP2100D}/hp2100_cpu_fp.c ${HP2100D}/hp2100_cpu_fpp.c \
+        ${HP2100D}/hp2100_cpu0.c ${HP2100D}/hp2100_cpu1.c \
+        ${HP2100D}/hp2100_cpu2.c ${HP2100D}/hp2100_cpu3.c \
+        ${HP2100D}/hp2100_cpu4.c ${HP2100D}/hp2100_cpu5.c \
+        ${HP2100D}/hp2100_cpu6.c ${HP2100D}/hp2100_cpu7.c \
+        ${HP2100D}/hp2100_di.c ${HP2100D}/hp2100_di_da.c \
+        ${HP2100D}/hp2100_disclib.c ${HP2100D}/hp2100_dma.c \
+        ${HP2100D}/hp2100_dp.c ${HP2100D}/hp2100_dq.c \
+        ${HP2100D}/hp2100_dr.c ${HP2100D}/hp2100_ds.c \
+        ${HP2100D}/hp2100_ipl.c ${HP2100D}/hp2100_lps.c \
+        ${HP2100D}/hp2100_lpt.c ${HP2100D}/hp2100_mc.c \
+        ${HP2100D}/hp2100_mem.c ${HP2100D}/hp2100_mpx.c \
+        ${HP2100D}/hp2100_ms.c ${HP2100D}/hp2100_mt.c \
+        ${HP2100D}/hp2100_mux.c ${HP2100D}/hp2100_pif.c \
+        ${HP2100D}/hp2100_pt.c ${HP2100D}/hp2100_sys.c \
+        ${HP2100D}/hp2100_tbg.c ${HP2100D}/hp2100_tty.c
 HP2100_OPT = -DHAVE_INT64 -I ${HP2100D}
 
 HP3000D = ${SIMHD}/HP3000
@@ -1621,7 +1618,7 @@ I7094_OPT = -DUSE_INT64 -I ${I7094D}
 
 I650D = ${SIMHD}/I650
 I650 = ${I650D}/i650_cpu.c ${I650D}/i650_cdr.c ${I650D}/i650_cdp.c \
-	${I650D}/i650_sys.c
+	${I650D}/i650_dsk.c ${I650D}/i650_mt.c ${I650D}/i650_sys.c
 I650_OPT = -I ${I650D} -DUSE_INT64 -DUSE_SIM_CARD
 
 
@@ -1672,12 +1669,14 @@ ALTAIRZ80 = ${ALTAIRZ80D}/altairz80_cpu.c ${ALTAIRZ80D}/altairz80_cpu_nommu.c \
 	${ALTAIRZ80D}/altairz80_dsk.c ${ALTAIRZ80D}/disasm.c \
 	${ALTAIRZ80D}/altairz80_sio.c ${ALTAIRZ80D}/altairz80_sys.c \
 	${ALTAIRZ80D}/altairz80_hdsk.c ${ALTAIRZ80D}/altairz80_net.c \
+	${ALTAIRZ80D}/s100_2sio.c ${ALTAIRZ80D}/s100_pmmi.c\
 	${ALTAIRZ80D}/flashwriter2.c ${ALTAIRZ80D}/i86_decode.c \
 	${ALTAIRZ80D}/i86_ops.c ${ALTAIRZ80D}/i86_prim_ops.c \
 	${ALTAIRZ80D}/i8272.c ${ALTAIRZ80D}/insnsd.c ${ALTAIRZ80D}/altairz80_mhdsk.c \
 	${ALTAIRZ80D}/mfdc.c ${ALTAIRZ80D}/n8vem.c ${ALTAIRZ80D}/vfdhd.c \
 	${ALTAIRZ80D}/s100_disk1a.c ${ALTAIRZ80D}/s100_disk2.c ${ALTAIRZ80D}/s100_disk3.c \
 	${ALTAIRZ80D}/s100_fif.c ${ALTAIRZ80D}/s100_mdriveh.c \
+	${ALTAIRZ80D}/s100_jadedd.c \
 	${ALTAIRZ80D}/s100_mdsa.c \
 	${ALTAIRZ80D}/s100_mdsad.c ${ALTAIRZ80D}/s100_selchan.c \
 	${ALTAIRZ80D}/s100_ss1.c ${ALTAIRZ80D}/s100_64fdc.c \
@@ -1685,7 +1684,7 @@ ALTAIRZ80 = ${ALTAIRZ80D}/altairz80_cpu.c ${ALTAIRZ80D}/altairz80_cpu_nommu.c \
 	${ALTAIRZ80D}/s100_tarbell.c \
 	${ALTAIRZ80D}/wd179x.c ${ALTAIRZ80D}/s100_hdc1001.c \
 	${ALTAIRZ80D}/s100_if3.c ${ALTAIRZ80D}/s100_adcs6.c \
-	${ALTAIRZ80D}/m68kcpu.c ${ALTAIRZ80D}/m68kdasm.c \
+	${ALTAIRZ80D}/m68kcpu.c ${ALTAIRZ80D}/m68kdasm.c ${ALTAIRZ80D}/m68kasm.c \
 	${ALTAIRZ80D}/m68kopac.c ${ALTAIRZ80D}/m68kopdm.c \
 	${ALTAIRZ80D}/m68kopnz.c ${ALTAIRZ80D}/m68kops.c ${ALTAIRZ80D}/m68ksim.c
 ALTAIRZ80_OPT = -I ${ALTAIRZ80D} -DUSE_SIM_IMD
@@ -1780,11 +1779,12 @@ IMDS210 = ${IMDS210C}/i8080.c ${IMDS210D}/imds-210_sys.c \
 	${IMDS210C}/i8251.c ${IMDS210C}/i8255.c \
 	${IMDS210C}/i8259.c ${IMDS210C}/i8253.c \
 	${IMDS210C}/ieprom.c ${IMDS210C}/iram8.c \
-	${IMDS210C}/ipbmultibus.c ${IMDS210C}/ipb.c \
+	${IMDS210C}/multibus.c ${IMDS210C}/ipb.c \
 	${IMDS210C}/ipc-cont.c ${IMDS210C}/ioc-cont.c \
 	${IMDS210C}/isbc202.c ${IMDS210C}/isbc201.c \
-	${IMDS210C}/isbc206.c ${IMDS210C}/isbc464.c \
-	${IMDS210C}/zx200a.c ${IMDS210C}/isbc064.c
+	${IMDS210C}/isbc206.c ${IMDS210C}/isbc208.c \
+	${IMDS210C}/isbc464.c ${IMDS210C}/zx200a.c \
+	${IMDS210C}/isbc064.c
 IMDS210_OPT = -I ${IMDS210D}
 
 
@@ -1794,11 +1794,12 @@ IMDS220 = ${IMDS220C}/i8080.c ${IMDS220D}/imds-220_sys.c \
 	${IMDS220C}/i8251.c ${IMDS220C}/i8255.c \
 	${IMDS220C}/i8259.c ${IMDS220C}/i8253.c \
 	${IMDS220C}/ieprom.c ${IMDS220C}/iram8.c \
-	${IMDS220C}/ipbmultibus.c ${IMDS220C}/ipb.c \
+	${IMDS220C}/multibus.c ${IMDS220C}/ipb.c \
 	${IMDS220C}/ipc-cont.c ${IMDS220C}/ioc-cont.c \
 	${IMDS220C}/isbc202.c ${IMDS220C}/isbc201.c \
-	${IMDS220C}/isbc206.c ${IMDS220C}/isbc464.c \
-	${IMDS220C}/zx200a.c ${IMDS220C}/isbc064.c
+	${IMDS220C}/isbc206.c ${IMDS210C}/isbc208.c \
+	${IMDS220C}/isbc464.c ${IMDS220C}/zx200a.c \
+	${IMDS220C}/isbc064.c
 IMDS220_OPT = -I ${IMDS220D}
 
 
@@ -1808,11 +1809,12 @@ IMDS225 = ${IMDS225C}/i8080.c ${IMDS225D}/imds-225_sys.c \
 	${IMDS225C}/i8251.c ${IMDS225C}/i8255.c \
 	${IMDS225C}/i8259.c ${IMDS225C}/i8253.c \
 	${IMDS225C}/ieprom.c ${IMDS225C}/iram8.c \
-	${IMDS225C}/ipcmultibus.c ${IMDS225C}/ipc.c \
+	${IMDS225C}/multibus.c ${IMDS225C}/ipc.c \
 	${IMDS225C}/ipc-cont.c ${IMDS225C}/ioc-cont.c \
 	${IMDS225C}/isbc202.c ${IMDS225C}/isbc201.c \
 	${IMDS225C}/zx200a.c ${IMDS225C}/isbc464.c \
-	${IMDS225C}/isbc206.c
+	${IMDS225C}/isbc206.c ${IMDS225C}/isbc208.c \
+	${IMDS220C}/isbc064.c
 IMDS225_OPT = -I ${IMDS225D}
 
 
@@ -1822,11 +1824,12 @@ IMDS230 = ${IMDS230C}/i8080.c ${IMDS230D}/imds-230_sys.c \
 	${IMDS230C}/i8251.c ${IMDS230C}/i8255.c \
 	${IMDS230C}/i8259.c ${IMDS230C}/i8253.c \
 	${IMDS230C}/ieprom.c ${IMDS230C}/iram8.c \
-	${IMDS230C}/ipbmultibus.c ${IMDS230C}/ipb.c \
+	${IMDS230C}/multibus.c ${IMDS230C}/ipb.c \
 	${IMDS230C}/ipc-cont.c ${IMDS230C}/ioc-cont.c \
 	${IMDS230C}/isbc202.c ${IMDS230C}/isbc201.c \
-	${IMDS230C}/isbc206.c ${IMDS230C}/isbc464.c \
-	${IMDS230C}/zx200a.c ${IMDS230C}/isbc064.c
+	${IMDS230C}/isbc206.c ${IMDS230C}/isbc208.c \
+	${IMDS230C}/isbc464.c ${IMDS230C}/zx200a.c \
+	${IMDS230C}/isbc064.c
 IMDS230_OPT = -I ${IMDS230D}
 
 
@@ -1836,7 +1839,7 @@ IMDS800 = ${IMDS800C}/i8080.c ${IMDS800D}/imds-800_sys.c \
         ${IMDS800D}/cpu.c ${IMDS800D}/front_panel.c \
         ${IMDS800D}/monitor.c ${IMDS800C}/ieprom1.c \
 	${IMDS800C}/i8251.c ${IMDS800C}/ieprom.c \
-	${IMDS800C}/m800multibus.c ${IMDS800C}/isbc064.c \
+	${IMDS800C}/multibus.c ${IMDS800C}/isbc064.c \
 	${IMDS800C}/isbc202.c ${IMDS800C}/isbc201.c \
 	${IMDS800C}/zx200a.c ${IMDS800C}/isbc464.c \
 	${IMDS800C}/isbc206.c ${IMDS800C}/i3214.c
@@ -1849,7 +1852,7 @@ IMDS810 = ${IMDS800C}/i8080.c ${IMDS810D}/imds-810_sys.c \
         ${IMDS810D}/cpu.c ${IMDS810D}/front_panel.c \
         ${IMDS810D}/monitor.c ${IMDS810C}/ieprom1.c \
 	${IMDS810C}/i8251.c ${IMDS810C}/ieprom.c \
-	${IMDS810C}/m800multibus.c ${IMDS810C}/isbc064.c \
+	${IMDS810C}/multibus.c ${IMDS810C}/isbc064.c \
 	${IMDS810C}/isbc202.c ${IMDS810C}/isbc201.c \
 	${IMDS810C}/zx200a.c ${IMDS810C}/isbc464.c \
 	${IMDS810C}/isbc206.c ${IMDS800C}/i3214.c
@@ -1905,10 +1908,36 @@ BESM6 = ${BESM6D}/besm6_cpu.c ${BESM6D}/besm6_sys.c ${BESM6D}/besm6_mmu.c \
         ${BESM6D}/besm6_punch.c ${BESM6D}/besm6_punchcard.c
 
 ifneq (,$(BESM6_BUILD))
+    BESM6_OPT = -I ${BESM6D} -DUSE_INT64 $(BESM6_PANEL_OPT)
     ifneq (,$(and ${SDLX_CONFIG},${VIDEO_LDFLAGS}, $(or $(and $(call find_include,SDL2/SDL_ttf),$(call find_lib,SDL2_ttf)), $(and $(call find_include,SDL/SDL_ttf),$(call find_lib,SDL_ttf)))))
         FONTPATH += /usr/share/fonts /Library/Fonts /usr/lib/jvm /System/Library/Frameworks/JavaVM.framework/Versions C:/Windows/Fonts
         FONTPATH := $(dir $(foreach dir,$(strip $(FONTPATH)),$(wildcard $(dir)/.)))
         FONTNAME += DejaVuSans.ttf LucidaSansRegular.ttf FreeSans.ttf AppleGothic.ttf tahoma.ttf
+#cmake-insert:set(BESM6_FONT)
+#cmake-insert:foreach (fdir IN ITEMS
+#cmake-insert:            "/usr/share/fonts" "/Library/Fonts" "/usr/lib/jvm"
+#cmake-insert:            "/System/Library/Frameworks/JavaVM.framework/Versions"
+#cmake-insert:            "$ENV{WINDIR}/Fonts")
+#cmake-insert:    foreach (font IN ITEMS
+#cmake-insert:                "DejaVuSans.ttf" "LucidaSansRegular.ttf" "FreeSans.ttf" "AppleGothic.ttf" "tahoma.ttf")
+#cmake-insert:        if (EXISTS ${fdir})
+#cmake-insert:            file(GLOB_RECURSE found_font ${fdir}/${font})
+#cmake-insert:            if (found_font)
+#cmake-insert:                get_filename_component(fontfile ${found_font} ABSOLUTE)
+#cmake-insert:                list(APPEND BESM6_FONT ${fontfile})
+#cmake-insert:            endif ()
+#cmake-insert:        endif ()
+#cmake-insert:    endforeach()
+#cmake-insert:endforeach()
+#cmake-insert:
+#cmake-insert:if (NOT BESM6_FONT)
+#cmake-insert:    message("No font file available, BESM-6 video panel disabled")
+#cmake-insert:    set(BESM6_PANEL_OPT)
+#cmake-insert:endif ()
+#cmake-insert:
+#cmake-insert:if (BESM6_FONT AND WITH_VIDEO)
+#cmake-insert:    list(GET BESM6_FONT 0 BESM6_FONT)
+#cmake-insert:endif ()
         $(info font paths are: $(FONTPATH))
         $(info font names are: $(FONTNAME))
         find_fontfile = $(strip $(firstword $(foreach dir,$(strip $(FONTPATH)),$(wildcard $(dir)/$(1))$(wildcard $(dir)/*/$(1))$(wildcard $(dir)/*/*/$(1))$(wildcard $(dir)/*/*/*/$(1)))))
@@ -1943,13 +1972,11 @@ ifneq (,$(BESM6_BUILD))
           endif
         else
           ifneq (,$(and $(findstring Linux,$(OSTYPE)),$(call find_exe,apt-get)))
-            $(info *** Info *** Install the development components of libSDL-ttf or libSDL2-ttf)
+            $(info *** Info *** Install the development components of libSDL2-ttf)
             $(info *** Info *** packaged for your Linux operating system distribution:)
             $(info *** Info ***        $$ sudo apt-get install libsdl2-ttf-dev)
-            $(info *** Info ***    or)
-            $(info *** Info ***        $$ sudo apt-get install libsdl-ttf-dev)
           else
-            $(info *** Info *** Install the development components of libSDL-ttf packaged by your)
+            $(info *** Info *** Install the development components of libSDL2-ttf packaged by your)
             $(info *** Info *** operating system distribution and rebuild your simulator to)
             $(info *** Info *** enable this extra functionality.)
           endif
@@ -1958,13 +1985,7 @@ ifneq (,$(BESM6_BUILD))
     else ifneq (,$(and $(findstring sdl2,${VIDEO_LDFLAGS}),$(call find_include,SDL2/SDL_ttf),$(call find_lib,SDL2_ttf)))
         $(info using libSDL2_ttf: $(call find_lib,SDL2_ttf) $(call find_include,SDL2/SDL_ttf))
         $(info ***)
-        BESM6_OPT = -I ${BESM6D} -DFONTFILE=${FONTFILE} -DUSE_INT64 ${VIDEO_CCDEFS} ${VIDEO_LDFLAGS} -lSDL2_ttf
-    else ifneq (,$(and $(call find_include,SDL/SDL_ttf),$(call find_lib,SDL_ttf)))
-        $(info using libSDL_ttf: $(call find_lib,SDL_ttf) $(call find_include,SDL/SDL_ttf))
-        $(info ***)
-        BESM6_OPT = -I ${BESM6D} -DFONTFILE=${FONTFILE} -DUSE_INT64 ${VIDEO_CCDEFS} ${VIDEO_LDFLAGS} -lSDL_ttf
-    else
-        BESM6_OPT = -I ${BESM6D} -DUSE_INT64 
+        BESM6_PANEL_OPT = -DFONTFILE=${FONTFILE} ${VIDEO_CCDEFS} ${VIDEO_LDFLAGS} -lSDL2_ttf
     endif
 endif
 
@@ -1976,7 +1997,7 @@ PDP6 = ${PDP6D}/kx10_cpu.c ${PDP6D}/kx10_sys.c ${PDP6D}/kx10_cty.c \
 	${PDP6D}/kx10_lp.c ${PDP6D}/kx10_pt.c ${PDP6D}/kx10_cr.c \
 	${PDP6D}/kx10_cp.c ${PDP6D}/pdp6_dct.c ${PDP6D}/pdp6_dtc.c \
 	${PDP6D}/pdp6_mtc.c ${PDP6D}/pdp6_dsk.c ${PDP6D}/pdp6_dcs.c \
-	${PDP6D}/kx10_dpy.c ${DISPLAYL} ${DISPLAY340}
+	${PDP6D}/kx10_dpy.c ${PDP6D}/pdp6_slave.c ${DISPLAYL} ${DISPLAY340}
 PDP6_OPT = -DPDP6=1 -DUSE_INT64 -I ${PDP6D} -DUSE_SIM_CARD ${DISPLAY_OPT} ${PDP6_DISPLAY_OPT}
 
 KA10D = ${SIMHD}/PDP10
@@ -1989,13 +2010,14 @@ KA10 = ${KA10D}/kx10_cpu.c ${KA10D}/kx10_sys.c ${KA10D}/kx10_df.c \
 	${KA10D}/kx10_rp.c ${KA10D}/kx10_rc.c ${KA10D}/kx10_dt.c \
 	${KA10D}/kx10_dk.c ${KA10D}/kx10_cr.c ${KA10D}/kx10_cp.c \
 	${KA10D}/kx10_tu.c ${KA10D}/kx10_rs.c ${KA10D}/ka10_pd.c \
-	${KA10D}/kx10_imp.c ${KA10D}/ka10_tk10.c ${KA10D}/ka10_mty.c \
-	${KA10D}/ka10_imx.c ${KA10D}/ka10_ch10.c ${KA10D}/ka10_stk.c \
-	${KA10D}/ka10_ten11.c ${KA10D}/ka10_auxcpu.c ${KA10D}/ka10_pmp.c \
-	${KA10D}/ka10_dkb.c ${KA10D}/pdp6_dct.c ${KA10D}/pdp6_dtc.c \
-	${KA10D}/pdp6_mtc.c ${KA10D}/pdp6_dsk.c ${KA10D}/pdp6_dcs.c \
-	${KA10D}/ka10_dpk.c ${KA10D}/kx10_dpy.c  ${PDP10D}/ka10_ai.c \
-	${DISPLAYL} ${DISPLAY340}
+	${KA10D}/kx10_rh.c ${KA10D}/kx10_imp.c ${KA10D}/ka10_tk10.c \
+	${KA10D}/ka10_mty.c ${KA10D}/ka10_imx.c ${KA10D}/ka10_ch10.c \
+	${KA10D}/ka10_stk.c ${KA10D}/ka10_ten11.c ${KA10D}/ka10_auxcpu.c \
+	$(KA10D)/ka10_pmp.c ${KA10D}/ka10_dkb.c ${KA10D}/pdp6_dct.c \
+	${KA10D}/pdp6_dtc.c ${KA10D}/pdp6_mtc.c ${KA10D}/pdp6_dsk.c \
+	${KA10D}/pdp6_dcs.c ${KA10D}/ka10_dpk.c ${KA10D}/kx10_dpy.c \
+	${KA10D}/ka10_ai.c ${KA10D}/ka10_iii.c ${KA10D}/kx10_disk.c \
+	${KA10D}//ka10_pclk.c ${DISPLAYL} ${DISPLAY340} ${DISPLAYIII}
 KA10_OPT = -DKA=1 -DUSE_INT64 -I ${KA10D} -DUSE_SIM_CARD ${NETWORK_OPT} ${DISPLAY_OPT} ${KA10_DISPLAY_OPT}
 ifneq (${PANDA_LIGHTS},)
 # ONLY for Panda display.
@@ -2011,10 +2033,11 @@ endif
 KI10 = ${KI10D}/kx10_cpu.c ${KI10D}/kx10_sys.c ${KI10D}/kx10_df.c \
 	${KI10D}/kx10_dp.c ${KI10D}/kx10_mt.c ${KI10D}/kx10_cty.c \
 	${KI10D}/kx10_lp.c ${KI10D}/kx10_pt.c ${KI10D}/kx10_dc.c  \
-	${KI10D}/kx10_rp.c ${KI10D}/kx10_rc.c ${KI10D}/kx10_dt.c \
-	${KI10D}/kx10_dk.c ${KI10D}/kx10_cr.c ${KI10D}/kx10_cp.c \
-	${KI10D}/kx10_tu.c ${KI10D}/kx10_rs.c ${KI10D}/kx10_imp.c \
-	${KI10D}/kx10_dpy.c ${DISPLAYL} ${DISPLAY340}
+	${KI10D}/kx10_rh.c ${KI10D}/kx10_rp.c ${KI10D}/kx10_rc.c \
+	${KI10D}/kx10_dt.c ${KI10D}/kx10_dk.c ${KI10D}/kx10_cr.c \
+	${KI10D}/kx10_cp.c ${KI10D}/kx10_tu.c ${KI10D}/kx10_rs.c \
+	${KI10D}/kx10_imp.c ${KI10D}/kx10_dpy.c ${KI10D}/kx10_disk.c \
+	${DISPLAYL} ${DISPLAY340}
 KI10_OPT = -DKI=1 -DUSE_INT64 -I ${KI10D} -DUSE_SIM_CARD ${NETWORK_OPT} ${DISPLAY_OPT} ${KI10_DISPLAY_OPT}
 ifneq (${PANDA_LIGHTS},)
 # ONLY for Panda display.
@@ -2023,14 +2046,23 @@ KI10 += ${KA10D}/ka10_lights.c
 KI10_LDFLAGS = -lusb-1.0
 endif
 
+KL10D = ${SIMHD}/PDP10
+KL10 = ${KL10D}/kx10_cpu.c ${KL10D}/kx10_sys.c ${KL10D}/kx10_df.c \
+	${KL10D}/kx10_mt.c ${KL10D}/kx10_dc.c ${KL10D}/kx10_rh.c \
+	${KL10D}/kx10_rp.c ${KL10D}/kx10_tu.c ${KL10D}/kx10_rs.c \
+	${KL10D}/kx10_imp.c ${KL10D}/kl10_fe.c ${KL10D}/ka10_pd.c \
+	${KL10D}/ka10_ch10.c ${KL10D}/kx10_lp.c ${KL10D}/kl10_nia.c \
+	${KL10D}/kx10_disk.c
+KL10_OPT = -DKL=1 -DUSE_INT64 -I $(KL10D) -DUSE_SIM_CARD ${NETWORK_OPT} 
+
 ATT3B2D = ${SIMHD}/3B2
-ATT3B2 = ${ATT3B2D}/3b2_cpu.c ${ATT3B2D}/3b2_mmu.c \
-	${ATT3B2D}/3b2_iu.c ${ATT3B2D}/3b2_if.c \
-	${ATT3B2D}/3b2_id.c ${ATT3B2D}/3b2_dmac.c \
-	${ATT3B2D}/3b2_sys.c ${ATT3B2D}/3b2_io.c \
+ATT3B2M400 = ${ATT3B2D}/3b2_400_cpu.c ${ATT3B2D}/3b2_400_sys.c \
+	${ATT3B2D}/3b2_400_stddev.c ${ATT3B2D}/3b2_400_mmu.c \
+	${ATT3B2D}/3b2_400_mau.c ${ATT3B2D}/3b2_iu.c \
+	${ATT3B2D}/3b2_if.c ${ATT3B2D}/3b2_id.c \
+	${ATT3B2D}/3b2_dmac.c ${ATT3B2D}/3b2_io.c \
 	${ATT3B2D}/3b2_ports.c ${ATT3B2D}/3b2_ctc.c \
-	${ATT3B2D}/3b2_ni.c ${ATT3B2D}/3b2_mau.c \
-	${ATT3B2D}/3b2_sysdev.c
+	${ATT3B2D}/3b2_ni.c
 ATT3B2_OPT = -DUSE_INT64 -DUSE_ADDR64 -I ${ATT3B2D} ${NETWORK_OPT}
 
 ###
@@ -2095,7 +2127,7 @@ ALL = pdp1 pdp4 pdp7 pdp8 pdp9 pdp15 pdp11 pdp10 \
 	swtp6800mp-a swtp6800mp-a2 tx-0 ssem b5500 isys8010 isys8020 \
 	isys8030 isys8024 imds-210 imds-220 imds-225 imds-230 imds-800 imds-810 \
 	scelbi 3b2 i701 i704 i7010 i7070 i7080 i7090 \
-	sigma uc15 pdp10-ka pdp10-ki pdp6
+	sigma uc15 pdp10-ka pdp10-ki pdp10-kl pdp6 i650
 
 all : ${ALL}
 
@@ -2183,6 +2215,15 @@ ${BIN}pdp10${EXE} : ${PDP10} ${SIM}
 	${CC} ${PDP10} ${SIM} ${PDP10_OPT} ${CC_OUTSPEC} ${LDFLAGS}
 ifneq (,$(call find_test,${PDP10D},pdp10))
 	$@ $(call find_test,${PDP10D},pdp10) ${TEST_ARG}
+endif
+
+imlac : ${BIN}imlac${EXE}
+
+${BIN}imlac${EXE} : ${IMLAC} ${SIM}
+	${MKDIRBIN}
+	${CC} ${IMLAC} ${SIM} ${IMLAC_OPT} ${CC_OUTSPEC} ${LDFLAGS}
+ifneq (,$(call find_test,${IMLAC},imlac))
+	$@ $(call find_test,${IMLACD},imlac) ${TEST_ARG}
 endif
 
 pdp11 : ${BIN}pdp11${EXE}
@@ -2739,7 +2780,7 @@ besm6 : ${BIN}besm6${EXE}
 ${BIN}besm6${EXE} : ${BESM6} ${SIM}
 ifneq (1,${CPP_BUILD}${CPP_FORCE})
 	${MKDIRBIN}
-	${CC} ${BESM6} ${SIM} ${BESM6_OPT} ${CC_OUTSPEC} ${LDFLAGS}
+	${CC} ${BESM6} ${SIM} ${BESM6_OPT} ${BESM6_PANEL_OPT} ${CC_OUTSPEC} ${LDFLAGS}
 ifneq (,$(call find_test,${BESM6D},besm6))
 	$@ $(call find_test,${BESM6D},besm6) ${TEST_ARG}
 endif
@@ -2794,9 +2835,9 @@ endif
 
 3b2 : ${BIN}3b2${EXE}
  
-${BIN}3b2${EXE} : ${ATT3B2} ${SIM} ${BUILD_ROMS}
+${BIN}3b2${EXE} : ${ATT3B2M400} ${SIM} ${BUILD_ROMS}
 	${MKDIRBIN}
-	${CC} ${ATT3B2} ${SIM} ${ATT3B2_OPT} ${CC_OUTSPEC} ${LDFLAGS}
+	${CC} ${ATT3B2M400} ${SIM} ${ATT3B2_OPT} ${CC_OUTSPEC} ${LDFLAGS}
 ifneq (,$(call find_test,${ATT3B2D},3b2))
 	$@ $(call find_test,${ATT3B2D},3b2) ${TEST_ARG}
 endif
@@ -2858,7 +2899,6 @@ endif
 i650 : ${BIN}i650${EXE}
 
 ${BIN}i650${EXE} : ${I650} ${SIM} 
-	#cmake:ignore-target
 	${MKDIRBIN}
 	${CC} ${I650} ${SIM} ${I650_OPT} ${CC_OUTSPEC} ${LDFLAGS}
 ifneq (,$(call find_test,${I650D},i650))
@@ -2892,6 +2932,14 @@ ifneq (,$(call find_test,${PDP10D},ki10))
 	$@ $(call find_test,${PDP10D},ki10) ${TEST_ARG}
 endif
 
+pdp10-kl : ${BIN}pdp10-kl${EXE}
+
+${BIN}pdp10-kl${EXE} : ${KL10} ${SIM}
+	${MKDIRBIN}
+	${CC} ${KL10} ${SIM} ${KL10_OPT} ${CC_OUTSPEC} ${LDFLAGS}
+ifneq (,$(call find_test,${PDP10D},kl10))
+	$@ $(call find_test,${PDP10D},kl10) ${TEST_ARG}
+endif
 
 # Front Panel API Demo/Test program
 
