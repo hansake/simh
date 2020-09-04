@@ -97,7 +97,5 @@ In chapter 14 of the SCELBAL book there is a language reference.
 To run SCELBAL on the SCELBI simulator, download the binary code from:
 http://www.willegal.net/scelbi/software/sc1.bin
 
-As the SCELBAL code is using the SCELBI "bitbanger" hardware interface,
-new 8008 interface routines musts be loaded to patch the i/o routines
-to use the this computer simulation.
-
+SCELBAL source code for SCELBI and also code modified for the promoncomp
+is in the repository: https://github.com/hansake/Software_for_Intel_8008
