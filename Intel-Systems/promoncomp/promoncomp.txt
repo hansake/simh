@@ -1,4 +1,4 @@
-Process Monitor Computer Simulator with Intel 8008 CPU
+Process Monitor Computer Simulator with Intel 8008 CPUMasterThesis76.pdf
 ======================================================
 
 1. Background.
@@ -102,3 +102,7 @@ http://www.willegal.net/scelbi/software/sc1.bin
 
 SCELBAL source code for SCELBI and also code modified for the promoncomp
 is in the repository: https://github.com/hansake/Software_for_Intel_8008
+
+The design of the Process monitoring computer is described (in swedish)
+in the document: MasterThesis76.pdf.
+
