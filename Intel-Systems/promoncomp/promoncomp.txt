@@ -22,7 +22,9 @@ paper mill in Hyltebruk in Sweden at Hylte Bruks AB.
 
 2.1 CPU
 
-	You may select different memory sizes, the default size is 16K. 
+	You may select different memory sizes, the default size is 16K.
+	(This is not really a true simukation of the computer as the
+	hardware could handle just 1 kByte RAM and 1 kByte EPROM).
 
         SET I8008 4K
         SET I8008 8K
