@@ -9,8 +9,9 @@ paper mill in Hyltebruk in Sweden at Hylte Bruks AB.
 
 2. Hardware
 
-        We are simulating a "homebuilt" computer with the following 
-configuration:
+        We are simulating a "homebuilt" computer (called promoncomp
+	i.e. Process Monitor Computer)
+	with the following configuration:
 
         device          simulates
         name(s)
