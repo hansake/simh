@@ -25,6 +25,7 @@
 
    tu           RH11/TM03/TU45 magtape
 
+   07-Sep-20    RMS     Fixed || -> | in macro (Mark Pizzolato)
    12-Jan-18    RMS     Fixed missing () in logical test (Mark Pizzolato)
    29-Dec-17    RMS     Read tape mark must set Massbus EXC (TRE)
    28-Mar-17    RMS     Documented switch fall through case (COVERITY)
@@ -265,7 +266,7 @@
 #define TC_ACC          0100000                         /* accelerating NI */
 #define TC_RW           0013777
 #define TC_MBZ          0004000
-#define TC_RIP          ((TC_800 << TC_V_DEN) || (TC_10C << TC_V_FMT))
+#define TC_RIP          ((TC_800 << TC_V_DEN) | (TC_10C << TC_V_FMT))
 #define GET_DEN(x)      (((x) >> TC_V_DEN) & TC_M_DEN)
 #define GET_FMT(x)      (((x) >> TC_V_FMT) & TC_M_FMT)
 #define GET_DRV(x)      (((x) >> TC_V_UNIT) & TC_M_UNIT)
@@ -399,8 +400,10 @@ REG tu_reg[] = {
     };
 
 MTAB tu_mod[] = {
-    { MTUF_WLK, 0, "write enabled", "WRITEENABLED", NULL },
-    { MTUF_WLK, MTUF_WLK, "write locked", "LOCKED", NULL }, 
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &set_writelock, &show_writelock,   NULL, "Write ring in place" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &set_writelock, NULL,   NULL, "no Write ring in place" },
     { MTAB_XTD|MTAB_VUN, 0, "FORMAT", "FORMAT",
       &sim_tape_set_fmt, &sim_tape_show_fmt, NULL },
     { MTAB_XTD|MTAB_VUN, 0, "CAPACITY", "CAPACITY",

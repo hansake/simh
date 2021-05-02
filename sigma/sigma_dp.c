@@ -45,9 +45,6 @@
 #include "sigma_io_defs.h"
 #include <math.h>
 
-#define UNIT_V_HWLK     (UNIT_V_UF + 0)                 /* hwre write lock */
-#define UNIT_HWLK       (1u << UNIT_V_HWLK)
-#define UNIT_WPRT       (UNIT_HWLK|UNIT_RO)             /* write prot */
 #define UNIT_V_AUTO     (UNIT_V_UF + 1)                 /* autosize */
 #define UNIT_AUTO       (1u << UNIT_V_AUTO)
 #define UNIT_V_DTYPE    (UNIT_V_UF + 2)                 /* drive type */
@@ -517,8 +514,10 @@ MTAB dp_mod[] = {
       NULL, "3282", &dp_set_size },
     { (UNIT_AUTO+UNIT_DTYPE), (DP_3283 << UNIT_V_DTYPE),
       NULL, "3283", &dp_set_size },
-    { UNIT_HWLK, 0, "write enabled", "WRITEENABLED", NULL },
-    { UNIT_HWLK, UNIT_HWLK, "write locked", "LOCKED", NULL },
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &set_writelock, &show_writelock,   NULL, "Write enable disk drive" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &set_writelock, NULL,   NULL, "Write lock disk drive" },
     { MTAB_XTD|MTAB_VDV, 0, "CHAN", "CHAN",
       &io_set_dvc, &io_show_dvc, NULL },
     { MTAB_XTD|MTAB_VDV, 0, "DVA", "DVA",
@@ -930,7 +929,6 @@ t_bool dp_end_sec (UNIT *uptr, uint32 lnt, uint32 exp, uint32 st)
 {
 uint32 cidx = uptr->UCTX;
 uint32 dva = dp_dib[cidx].dva;
-uint32 dtype = GET_DTYPE (uptr->flags);
 DP_CTX *ctx = &dp_ctx[cidx];
 
 if (st != CHS_ZBC) {                                    /* end record? */
@@ -978,7 +976,6 @@ return DVS_AUTO;
 uint32 dp_tdv_status (uint32 cidx, uint32 un)
 {
 uint32 st;
-DP_CTX *ctx = &dp_ctx[cidx];
 UNIT *dp_unit = dp_dev[cidx].units;
 t_bool on_cyl;
 
@@ -996,7 +993,6 @@ return st;
 uint32 dp_aio_status (uint32 cidx, uint32 un)
 {
 uint32 st;
-DP_CTX *ctx = &dp_ctx[cidx];
 UNIT *dp_unit = dp_dev[cidx].units;
 t_bool on_cyl;
 

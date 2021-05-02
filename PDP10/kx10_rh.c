@@ -183,7 +183,7 @@ t_stat rh_devio(uint32 dev, uint64 *data) {
      DEVICE        *dptr = NULL;
      struct rh_if  *rhc = NULL;
      int            drive;
-     uint32         drdat;
+     uint32         drdat = 0;
 
      for (drive = 0; rh[drive].dev_num != 0; drive++) {
         if (rh[drive].dev_num == (dev & 0774)) {
@@ -491,7 +491,6 @@ t_stat rh_devio(uint32 dev, uint64 *data) {
 /* Handle KI and KL style interrupt vectors */
 t_addr
 rh_devirq(uint32 dev, t_addr addr) {
-    DEVICE        *dptr = NULL;
     struct rh_if  *rhc = NULL;
     int            drive;
 
@@ -506,6 +505,8 @@ rh_devirq(uint32 dev, t_addr addr) {
            addr = RSIGN | rhc->ivect;
         else if (rhc->imode == 2) /* RH20 style */
            addr = rhc->ivect;
+    } else {
+       sim_printf("Unable to find device %03o\n\r", dev);
     }
     return  addr;
 }

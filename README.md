@@ -411,6 +411,8 @@ Device simulator authors can easily schedule their device polling activities to 
     GO UNTIL breakpoint              Establish the breakpoint specified and go until it is encountered
     GO UNTIL "output-string" ...     Establish the specified "output-string" as an EXPECT and go until it is encountered.
     RUNLIMIT						 Bound simulator execution time
+    TAR                              Manipulate file archives
+    CURL                             Access URLs from the web
 
 #### Command Processing Enhancements
 
@@ -553,7 +555,7 @@ Ubuntu:
 
 #### Windows
 
-Compiling on windows is supported with recent versions of Microsoft Visual Studio (Standard or Express) and using GCC via the MinGW environment.  Things may also work under Cygwin, but that is not the preferred windows environment.  Not all features will be available as well as with either Visual Studio or MinGW.
+Compiling on windows is supported with recent versions of Microsoft Visual Studio (Standard or Express) and using GCC via the MinGW32 environment.  Things may also work under Cygwin, but that is not the preferred windows environment.  Not all features will be available as well as with either Visual Studio or MinGW32.
 
 ##### Required related files
 The file https://github.com/simh/simh/blob/master/Visual%20Studio%20Projects/0ReadMe_Projects.txt
@@ -564,7 +566,7 @@ The file https://github.com/simh/simh/blob/master/Visual%20Studio%20Projects/0Re
 
 ##### MinGW32
 
-The file https://github.com/simh/simh/blob/master/Visual%20Studio%20Projects/0ReadMe_Projects.txt describes the required steps to use the setup your environment to build using MinGW32.
+Building with MinGW32 requires the same directory organization and the dependent package support described for Visual Studio in the file https://github.com/simh/simh/blob/master/Visual%20Studio%20Projects/0ReadMe_Projects.txt.  Building with MinGW64 is not supported.
 
 #### VMS
 

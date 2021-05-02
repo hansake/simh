@@ -202,8 +202,10 @@ MTAB                tu_mod[] = {
     {MTAB_XTD|MTAB_VDV, TYPE_RH20, "RH20", "RH20", &rh_set_type, &rh_show_type,
               NULL, "Sets controller to RH20"},
 #endif
-    {MTUF_WLK, 0, "write enabled", "WRITEENABLED", NULL},
-    {MTUF_WLK, MTUF_WLK, "write locked", "LOCKED", NULL},
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &set_writelock, &show_writelock,   NULL, "Write ring in place" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &set_writelock, NULL,   NULL, "no Write ring in place" },
     {MTAB_XTD|MTAB_VUN, 0, "FORMAT", "FORMAT",
      &sim_tape_set_fmt, &sim_tape_show_fmt, NULL},
     {MTAB_XTD|MTAB_VUN|MTAB_VALR, 0, "LENGTH", "LENGTH",
@@ -387,7 +389,7 @@ tu_read(DEVICE *dptr, struct rh_if *rhc, int reg, uint32 *data) {
            temp |= DS_MOL;
            if (uptr->CMD & CS_TM)
               temp |= DS_TM;
-           if (uptr->flags & MTUF_WLK)
+           if (uptr->flags & MTUF_WRP)
               temp |= DS_WRL;
            if ((uptr->CMD & (CS_MOTION|CS_PIP|CS1_GO)) == 0)
               temp |= DS_DRY;
@@ -556,7 +558,7 @@ t_stat tu_srv(UNIT * uptr)
                  uptr->DATAPTR = uptr->hwmark-1;
                  uptr->CPOS = cc_max;
                  rhc->buf = 0;
-                 sim_activate(uptr, 100);
+                 sim_activate(uptr, 120);
              }
              return SCPE_OK;
          }
@@ -609,7 +611,7 @@ t_stat tu_srv(UNIT * uptr)
                  uptr->DATAPTR = 0;
                  uptr->CPOS = 0;
                  rhc->buf = 0;
-                 sim_activate(uptr, 100);
+                 sim_activate(uptr, 120);
              }
              return SCPE_OK;
          }
@@ -627,7 +629,7 @@ t_stat tu_srv(UNIT * uptr)
                  uptr->CPOS = 0;
                  if (GET_FNC(uptr->CMD) == FNC_READ && rh_write(rhc) == 0) {
                      tu_error(uptr, MTSE_OK);
-                     if (uptr->DATAPTR == uptr->hwmark)
+                     if ((uint32)uptr->DATAPTR == uptr->hwmark)
                          (void)rh_blkend(rhc);
                      rh_finish_op(rhc, 0);
                      return SCPE_OK;
@@ -662,7 +664,7 @@ t_stat tu_srv(UNIT * uptr)
                   rh_finish_op(rhc, 0);
                   return SCPE_OK;
              }
-             if ((uptr->flags & MTUF_WLK) != 0) {
+             if ((uptr->flags & MTUF_WRP) != 0) {
                  tu_error(uptr, MTSE_WRP);
                  rh_finish_op(rhc, 0);
                  return SCPE_OK;
@@ -718,7 +720,7 @@ t_stat tu_srv(UNIT * uptr)
     case FNC_WTM:
          uptr->CMD &= ~CS_PIP;
          uptr->CMD |= CS_ATA;
-         if ((uptr->flags & MTUF_WLK) != 0) {
+         if ((uptr->flags & MTUF_WRP) != 0) {
              tu_error(uptr, MTSE_WRP);
          } else {
              tu_error(uptr, sim_tape_wrtmk(uptr));
@@ -729,7 +731,7 @@ t_stat tu_srv(UNIT * uptr)
     case FNC_ERASE:
          uptr->CMD &= ~CS_PIP;
          uptr->CMD |= CS_ATA;
-         if ((uptr->flags & MTUF_WLK) != 0) {
+         if ((uptr->flags & MTUF_WRP) != 0) {
              tu_error(uptr, MTSE_WRP);
          } else {
              tu_error(uptr, sim_tape_wrgap(uptr, 35));
@@ -779,11 +781,11 @@ t_stat tu_srv(UNIT * uptr)
             return SCPE_OK;
          } else {
             tu_tcr[ctlr] &= ~(TC_FCS);
-            sim_activate(uptr, reclen * 50);
+            sim_activate(uptr, reclen * 100);
          }
          return SCPE_OK;
     }
-    sim_activate(uptr, 20);
+    sim_activate(uptr, 50);
     return SCPE_OK;
 }
 

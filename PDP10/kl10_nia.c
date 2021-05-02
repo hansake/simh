@@ -399,7 +399,7 @@ DEBTAB              nia_debug[] = {
     {"DETAIL", DEBUG_DETAIL, "Show details about device"},
     {"EXP", DEBUG_EXP, "Show exception information"},
     {"CONI", DEBUG_CONI, "Show coni instructions"},
-    {"CONO", DEBUG_CONO, "Show coni instructions"},
+    {"CONO", DEBUG_CONO, "Show cono instructions"},
     {"DATAIO", DEBUG_DATAIO, "Show datai and datao instructions"},
     {"IRQ", DEBUG_IRQ, "Show IRQ requests"},
 #define DEBUG_ARP (DEBUG_IRQ<<1)
@@ -713,9 +713,12 @@ uint8 *nia_cpy_from(t_addr addr, uint8 *data, int len)
         case 1:
                 word =  (uint64)(*data++) << 28;
                 break;
+        default:
+                word = 0;
+                break;
         }
+        M[addr++] = word;
     }
-    M[addr++] = word;
     return data;
 }
 
@@ -1200,7 +1203,6 @@ int nia_send_pkt(uint64 cmd)
  */
 t_stat nia_cmd_srv(UNIT * uptr)
 {
-    t_addr free_q = nia_data.unk_hdr;
     uint64    word1, word2;
     uint32    cmd;
     int       len, i;

@@ -142,6 +142,7 @@ typedef struct {
 t_stat rz_svc (UNIT *uptr);
 t_stat rz_isvc (UNIT *uptr);
 t_stat rz_reset (DEVICE *dptr);
+t_stat rz_attach (UNIT *uptr, CONST char *cptr);
 t_stat rz_help (FILE *st, DEVICE *dptr, UNIT *uptr, int32 flag, const char *cptr);
 t_stat rz_set_type (UNIT *uptr, int32 val, CONST char *cptr, void *desc);
 t_stat rz_show_type (FILE *st, UNIT *uptr, int32 val, CONST void *desc);
@@ -199,12 +200,10 @@ DEBTAB rz_debug[] = {
 };
 
 MTAB rz_mod[] = {
-    { SCSI_WLK,         0, NULL, "WRITEENABLED",
-      &scsi_set_wlk, NULL, NULL, "Write enable disk drive" },
-    { SCSI_WLK,  SCSI_WLK, NULL, "LOCKED",
-      &scsi_set_wlk, NULL, NULL, "Write lock disk drive"  },
-    { MTAB_XTD|MTAB_VUN, 0, "WRITE", NULL,
-      NULL, &scsi_show_wlk, NULL, "Display drive writelock status" },
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &scsi_set_wlk, &scsi_show_wlk,   NULL, "Write enable drive" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &scsi_set_wlk, NULL,   NULL, "Write lock drive" },
     { MTAB_XTD|MTAB_VUN, RZ23_DTYPE, NULL, "RZ23",
       &rz_set_type, NULL, NULL, "Set RZ23 Disk Type" },
     { MTAB_XTD|MTAB_VUN, RZ23L_DTYPE, NULL, "RZ23L",
@@ -250,11 +249,32 @@ MTAB rz_mod[] = {
     { 0 }
     };
 
+static const char *drv_types[] = {
+    "RZ23",
+    "RZ23L",
+    "RZ24",
+    "RZ24L",
+    "RZ25",
+    "RZ25L",
+    "RZ26",
+    "RZ26L",
+    "RZ55",
+    "CDROM",
+    "RRD40",
+    "RRD42",
+    "RRW11",
+    "CDW900",
+    "XR1001",
+    "TZK50",
+    "TZ30",
+    "RZUSER"
+    };
+
 DEVICE rz_dev = {
     "RZ", rz_unit, rz_reg, rz_mod,
     RZ_NUMDR + 1, DEV_RDX, 31, 1, DEV_RDX, 8,
     NULL, NULL, &rz_reset,
-    NULL, &scsi_attach, &scsi_detach,
+    NULL, &rz_attach, &scsi_detach,
     NULL, DEV_DEBUG | DEV_DISK | DEV_SECTORS | RZ_FLAGS,
     0, rz_debug, NULL, NULL, &rz_help, NULL, NULL,
     &rz_description
@@ -302,7 +322,7 @@ DEVICE rzb_dev = {
     "RZB", rzb_unit, rzb_reg, rz_mod,
     RZ_NUMDR + 1, DEV_RDX, 31, 1, DEV_RDX, 8,
     NULL, NULL, &rz_reset,
-    NULL, &scsi_attach, &scsi_detach,
+    NULL, &rz_attach, &scsi_detach,
     &rzb_dib, DEV_DEBUG | DEV_DISK | DEV_SECTORS | RZB_FLAGS,
     0, rz_debug, NULL, NULL,
     &rz_help, NULL                                      /* help and attach_help routines */
@@ -329,7 +349,6 @@ int32 rz_rd (int32 pa)
 int32 ctlr = (pa >> 8) & 1;
 CTLR *rz = rz_ctxmap[ctlr];
 DEVICE *dptr = rz_devmap[ctlr];
-UNIT *uptr = dptr->units + RZ_CTLR;
 int32 rg = (pa >> 2) & 0x1F;
 int32 data = 0;
 int32 len;
@@ -859,6 +878,11 @@ fprint_show_help (st, dptr);
 fprint_reg_help (st, dptr);
 scsi_help (st, dptr, uptr, flag, cptr);
 return SCPE_OK;
+}
+
+t_stat rz_attach (UNIT *uptr, CONST char *cptr)
+{
+return scsi_attach_ex (uptr, cptr, drv_types);
 }
 
 const char *rz_description (DEVICE *dptr)

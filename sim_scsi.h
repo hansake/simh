@@ -66,10 +66,9 @@
 #define SCSI_DBG_BUS    0x04000000                      /* bus activity */
 #define SCSI_DBG_DSK    0x08000000                      /* disk activity */
 
-#define SCSI_V_WLK      DKUF_V_WLK                      /* hwre write lock */
 #define SCSI_V_NOAUTO   ((DKUF_V_UF > MTUF_V_UF) ? DKUF_V_UF : MTUF_V_UF)/* noautosize */
 #define SCSI_V_UF       (SCSI_V_NOAUTO + 1)
-#define SCSI_WLK        (1 << SCSI_V_WLK)
+#define SCSI_WLK        (UNIT_WLK|UNIT_RO)              /* hwre write lock */
 #define SCSI_NOAUTO     (1 << SCSI_V_NOAUTO)
 
 
@@ -129,6 +128,7 @@ t_stat scsi_set_wlk (UNIT *uptr, int32 val, CONST char *cptr, void *desc);
 t_stat scsi_show_fmt (FILE *st, UNIT *uptr, int32 val, CONST void *desc);
 t_stat scsi_show_wlk (FILE *st, UNIT *uptr, int32 val, CONST void *desc);
 t_stat scsi_attach (UNIT *uptr, CONST char *cptr);
+t_stat scsi_attach_ex (UNIT *uptr, CONST char *cptr, const char **drivetypes);
 t_stat scsi_detach (UNIT *uptr);
 t_stat scsi_help (FILE *st, DEVICE *dptr, UNIT *uptr, int32 flag, const char *cptr);
 

@@ -626,7 +626,6 @@ t_stat ports_reset(DEVICE *dptr)
         ports_conf = TRUE;
 
         if (ports_ldsc == NULL) {
-            ports_desc.lines = DEF_PORTS_CARDS * PORTS_LINES;
             ports_desc.ldsc = ports_ldsc =
                 (TMLN *)calloc(ports_desc.lines, sizeof(*ports_ldsc));
         }
@@ -693,7 +692,7 @@ t_stat ports_cio_svc(UNIT *uptr)
 
 t_stat ports_rcv_svc(UNIT *uptr)
 {
-    uint8 cid, subdev;
+    uint8 cid;
     int32 temp, ln;
     char c;
     cio_entry rentry = {0};
@@ -714,7 +713,6 @@ t_stat ports_rcv_svc(UNIT *uptr)
 
     for (ln = 0; ln < ports_desc.lines; ln++) {
         cid = LCID(ln);
-        subdev = LPORT(ln);
 
         if (!ports_ldsc[ln].conn && ports_state[ln].conn) {
             ports_update_conn(ln);

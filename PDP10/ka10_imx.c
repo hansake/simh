@@ -23,7 +23,6 @@
    AI lab PDP-10.
 */
 
-#include <time.h>
 #include "kx10_defs.h"
 #include "sim_video.h"
 
@@ -171,8 +170,6 @@ t_stat imx_reset (DEVICE *dptr)
 
 t_stat imx_devio(uint32 dev, uint64 *data)
 {
-    DEVICE *dptr = &imx_dev;
-
     switch(dev & 07) {
     case CONO|4:
         sim_debug(DEBUG_CONO, &imx_dev, "%06llo\n", *data);
@@ -209,12 +206,12 @@ t_stat imx_devio(uint32 dev, uint64 *data)
 
 t_stat imx_svc (UNIT *uptr)
 {
-    int max_samples;
+    uint64 max_samples;
 
     if (status & IMX_PACK) {
-        max_samples = 3;
+        max_samples = 3LL;
     } else {
-        max_samples = 1;
+        max_samples = 1LL;
     }
 
     if (imx_samples < max_samples) {
