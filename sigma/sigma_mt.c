@@ -189,8 +189,10 @@ REG mt_reg[] = {
     };
 
 MTAB mt_mod[] = {
-    { MTUF_WLK, 0, "write enabled", "WRITEENABLED", NULL },
-    { MTUF_WLK, MTUF_WLK, "write locked", "LOCKED", NULL }, 
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &set_writelock, &show_writelock,   NULL, "Write enable tape drive" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &set_writelock, NULL,   NULL, "Write lock tape drive" },
     { MTAB_XTD|MTAB_VUN, 0, "FORMAT", "FORMAT",
       &sim_tape_set_fmt, &sim_tape_show_fmt, NULL },
     { MTAB_XTD|MTAB_VUN, 0, "CAPACITY", "CAPACITY",
@@ -470,8 +472,6 @@ return SCPE_OK;
 
 t_stat mt_map_err (UNIT *uptr, t_stat st)
 {
-int32 u = uptr - mt_dev.units;
-
 switch (st) {
 
     case MTSE_FMT:                                      /* illegal fmt */
@@ -639,8 +639,6 @@ return r;
 
 t_stat mt_detach (UNIT* uptr)
 {
-uint32 un = uptr - mt_dev.units;
-
 if (!(uptr->flags & UNIT_ATTABLE))
     return SCPE_NOATT;
 uptr->UST = 0;

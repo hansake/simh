@@ -30,7 +30,7 @@
    23-Oct-13    RMS     Revised for new boot setup routine
    18-Apr-11    MP      Fixed t_addr printouts for 64b big-endian systems
    17-May-07    RMS     CS1 DVA resides in device, not MBA
-   29-Apr-07    RMS     Fixed bug in setting FCE on TMK Naoki Hamada)
+   29-Apr-07    RMS     Fixed bug in setting FCE on TMK (Naoki Hamada)
    16-Feb-06    RMS     Added tape capacity checking
    12-Nov-05    RMS     Changed default formatter to TM03 (for VMS)
    31-Oct-05    RMS     Fixed address width for large files
@@ -309,10 +309,10 @@ MTAB tu_mod[] = {
 #endif
     { MTAB_XTD|MTAB_VDV, 0, "FORMATTER", NULL,
       NULL, &tu_show_fmtr, NULL, "Display formatter/controller type" },
-    { MTUF_WLK,         0, "write enabled",  "WRITEENABLED", 
-        NULL, NULL, NULL, "Write enable tape drive" },
-    { MTUF_WLK,  MTUF_WLK, "write locked",   "LOCKED", 
-        NULL, NULL, NULL, "Write lock tape drive"  },
+    { MTAB_XTD|MTAB_VUN, 0, "write enabled", "WRITEENABLED", 
+        &set_writelock, &show_writelock,   NULL, "Write ring in place" },
+    { MTAB_XTD|MTAB_VUN, 1, NULL, "LOCKED", 
+        &set_writelock, NULL,   NULL, "no Write ring in place" },
     { UNIT_TYPE, UNIT_TE16, "TE16", "TE16", 
         NULL, NULL, NULL, "Set drive type to TE16" },
     { UNIT_TYPE, UNIT_TU45, "TU45", "TU45", 

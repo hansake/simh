@@ -425,8 +425,11 @@ for (i = 0; i < (int32) dibp->lnt; i = i + 2) {         /* create entries */
                                         "Device %s address conflict with %s at 0%o\n",
                              sim_dname (dptr), cdname, (int)dibp->ba);
         }
-    if ((dibp->rd == NULL) && (dibp->wr == NULL) && (dibp->vnum == 0)) 
+    if ((dibp->rd == NULL) && (dibp->wr == NULL) && (dibp->vnum == 0)) {
         iodibp[idx] = NULL;                         /* deregister DIB */
+        iodispR[idx] = NULL;                        /* and related dispatches */
+        iodispW[idx] = NULL;
+        }
     else {
         if (dibp->rd)
             iodispR[idx] = dibp->rd;                /* set rd dispatch */
@@ -616,8 +619,12 @@ for (mr = mstart + 1; mr <= mend; mr++) {
         strcpy (same_desc, desc);
         continue;
         }
-    if (same_start != mr - 1)
-        fprintf (st, "%s-MAP[%04X thru %04X] same as above\n", busname, same_start + 1, mr - 1);
+    if (same_start != mr - 1) {
+        if (same_start + 1 == mr - 1)
+            fprintf (st, "%s-MAP[%04X] same as above\n", busname, same_start + 1);
+        else
+            fprintf (st, "%s-MAP[%04X thru %04X] same as above\n", busname, same_start + 1, mr - 1);
+        }
     fprintf (st, "%s-MAP[%04X] = %08X%s\n", busname, mr, busmap[mr], desc);
     same_start = mr;
     same_val = busmap[mr];
@@ -875,11 +882,9 @@ AUTO_CON auto_tab[] = {/*c  #v  am vm  fxa   fxv */
 
 static void build_vector_tab (void)
 {
-int32 ilvl, ibit;
 static t_bool done = FALSE;
 AUTO_CON *autp;
 DEVICE *dptr;
-DIB *dibp;
 uint32 j, k;
 
 if (done)
@@ -891,10 +896,13 @@ for (j = 0; (dptr = sim_devices[j]) != NULL; j++) {
     for (autp = auto_tab; autp->valid >= 0; autp++) {
         for (k=0; autp->dnam[k]; k++) {
             if (!strcmp(dptr->name, autp->dnam[k])) {
+#if (VEC_SET != 0)
+                int32 ilvl, ibit;
+                DIB *dibp;
+
                 dibp = (DIB *)dptr->ctxt;
                 ilvl = dibp->vloc / 32;
                 ibit = dibp->vloc % 32;
-#if (VEC_SET != 0)
                 if (1) {
                     int v;
                     
@@ -914,7 +922,7 @@ t_stat auto_config (const char *name, int32 nctrl)
 {
 uint32 csr = IOPAGEBASE + AUTO_CSRBASE;
 uint32 vec = AUTO_VECBASE;
-int32 ilvl, ibit, numc;
+int32 numc;
 AUTO_CON *autp;
 DEVICE *dptr;
 DIB *dibp;
@@ -958,8 +966,6 @@ for (autp = auto_tab; autp->valid >= 0; autp++) {       /* loop thru table */
         if (dibp == NULL)                               /* not there??? */
             return SCPE_IERR;
         numc = dibp->numc ? dibp->numc : 1;
-        ilvl = dibp->vloc / 32;
-        ibit = dibp->vloc % 32;
         /* Identify how many devices earlier in the device list are 
            enabled and use that info to determine fixed address assignments */
         for (k=jena=0; k<j; k++) {

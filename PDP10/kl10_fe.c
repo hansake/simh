@@ -835,7 +835,7 @@ void dte_its(UNIT *uptr) {
          if (word == 0)
              cty_done++;
 #if (NUM_DEVS_TTY > 0)
-         else if (word > 0 && word < tty_desc.lines) {
+         else if (word > 0 && word < (uint64)tty_desc.lines) {
             tty_done[word-1] = 1;
          }
 #endif
@@ -1026,7 +1026,7 @@ dte_function(UNIT *uptr)
 
         case PRI_EMRDT:            /* Request Date/Time */
                {
-                   time_t t = time(NULL);
+                   time_t t = sim_get_time(NULL);
                    struct tm *tm = localtime(&t);
                    int yr = tm->tm_year + 1900;
                    int tim = (((tm->tm_hour * 60) + tm->tm_min) * 60) +
@@ -1793,20 +1793,11 @@ t_stat dtei_svc (UNIT *uptr)
 /* Handle output of characters to CTY. Started whenever there is output pending */
 t_stat dteo_svc (UNIT *uptr)
 {
-    uint32   base = 0;
-    UNIT     *optr = &dte_unit[0];
-
-#if KI_22BIT
-#if KL_ITS
-    if (!QITS)
-#endif
-    base = eb_ptr;
-#endif
     /* Flush out any pending CTY output */
     while(not_empty(&cty_out)) {
         char ch = cty_out.buff[cty_out.out_ptr];
         if (ch != 0) {
-            if (sim_putchar(ch) != SCPE_OK) {
+            if (sim_putchar_s(ch) != SCPE_OK) {
                 sim_activate(uptr, 1000);
                 return SCPE_OK;;
             }
@@ -1972,7 +1963,7 @@ const char *dte_description (DEVICE *dptr)
 void
 lp20_printline(UNIT *uptr, int nl) {
     int     trim = 0;
-    uint16  data1 = 1;
+
     /* Trim off trailing blanks */
     while (uptr->COL >= 0 && lp20_buffer[uptr->COL - 1] == ' ') {
          uptr->COL--;
@@ -2027,7 +2018,6 @@ t_stat lp20_svc (UNIT *uptr)
     char    ch;
     uint16  ram_ch;
     uint16  data1[5];
-    int     l = uptr->LINE;
 
     if ((uptr->flags & UNIT_ATT) == 0)
         return SCPE_OK;
@@ -2055,7 +2045,7 @@ t_stat lp20_svc (UNIT *uptr)
     while (not_empty(&lp20_queue)) {
         ch = lp20_queue.buff[lp20_queue.out_ptr];
         inco(&lp20_queue);
-        ram_ch = lp20_ram[ch];
+        ram_ch = lp20_ram[(int)ch];
 
         /* If previous was delimiter or translation do it */
         if (uptr->LPST & DELFLG || (ram_ch &(LP20_RAM_DEL|LP20_RAM_TRN)) != 0) {
@@ -2283,7 +2273,6 @@ t_stat ttyo_svc (UNIT *uptr)
 {
     t_stat   r;
     int32    ln;
-    int      n = 0;
     TMLN     *lp;
 
     if ((tty_unit[0].flags & UNIT_ATT) == 0)                  /* attached? */

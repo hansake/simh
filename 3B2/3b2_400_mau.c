@@ -944,7 +944,8 @@ static uint32 round_pack_int(t_bool sign, t_uint64 frac, RM rounding_mode)
 
     round_bits = frac & 0x7f;
     frac = (frac + round_increment) >> 7;
-    frac &= ~(((round_bits ^ 0x40) == 0) & (rounding_mode == ROUND_NEAREST));
+    frac &= ~((t_uint64)((round_bits ^ 0x40) == 0) &
+              (t_uint64)(rounding_mode == ROUND_NEAREST));
 
     result = (int32)frac;
 
@@ -999,7 +1000,8 @@ static t_int64 round_pack_int64(t_bool sign,
             mau_exc(MAU_ASR_OS, MAU_ASR_OM);
             return sign ? 0x8000000000000000ull : 0x7fffffffffffffffull;
         }
-        abs_0 &= ~(((t_uint64)(abs_1 << 1) == 0) & (rounding_mode == ROUND_NEAREST));
+        abs_0 &= ~((t_uint64)((abs_1 << 1) == 0) &
+                   (t_uint64)(rounding_mode == ROUND_NEAREST));
     }
 
     z = abs_0;
@@ -1076,7 +1078,8 @@ static SFP round_pack_sfp(t_bool sign, int16 exp, uint32 frac, RM rounding_mode)
     }
 
     frac = (frac + round_increment) >> 7;
-    frac &= ~(((round_bits ^ 0x40) == 0) & (rounding_mode == ROUND_NEAREST));
+    frac &= ~((t_uint64)((round_bits ^ 0x40) == 0) &
+              (t_uint64)(rounding_mode == ROUND_NEAREST));
     if (frac == 0) {
         exp = 0;
     }
@@ -1154,7 +1157,8 @@ static DFP round_pack_dfp(t_bool sign, int16 exp, t_uint64 frac,
         }
     } else {
         frac = (frac + round_increment) >> 11;
-        frac &= ~(t_uint64)(!(round_bits ^ 0x200));
+        lsb = !((t_bool)(round_bits ^ 0x200));
+        frac &= ~((t_uint64)lsb);
     }
 
     return PACK_DFP(sign, exp, frac);
@@ -1170,10 +1174,8 @@ static void round_pack_xfp(t_bool sign, int32 exp,
                            t_uint64 frac_a, t_uint64 frac_b,
                            RM rounding_mode, XFP *result)
 {
-    uint8 round_nearest_even, is_tiny;
+    uint8 is_tiny;
     t_int64 round_mask;
-
-    round_nearest_even = (rounding_mode == ROUND_NEAREST);
 
     if (0x7ffd <= (uint32)(exp - 1)) {
         if (0x7ffe < exp) {
@@ -2681,7 +2683,7 @@ static void xfp_sqrt(XFP *a, XFP *result, RM rounding_mode)
 
 static void xfp_remainder(XFP *a, XFP *b, XFP *result, RM rounding_mode)
 {
-    uint32 a_sign, b_sign, r_sign;
+    uint32 a_sign, r_sign;
     int32 a_exp, b_exp, exp_diff;
     t_uint64 a_frac_0, a_frac_1, b_frac;
     t_uint64 q, term_0, term_1, alt_a_frac_0, alt_a_frac_1;
@@ -2689,7 +2691,6 @@ static void xfp_remainder(XFP *a, XFP *b, XFP *result, RM rounding_mode)
     a_sign = XFP_SIGN(a);
     a_exp = XFP_EXP(a);
     a_frac_0 = XFP_FRAC(a);
-    b_sign = XFP_SIGN(b);
     b_exp = XFP_EXP(b);
     b_frac = XFP_FRAC(b);
 

@@ -1313,7 +1313,7 @@ t_stat xq_process_mop(CTLR* xq)
     return SCPE_NOFNC;
 
   while ((meb->type != 0) && (meb < limit)) {
-    address = (meb->add_hi << 16) || (meb->add_mi << 8) || meb->add_lo;
+    address = (meb->add_hi << 16) | (meb->add_mi << 8) | meb->add_lo;
 
     /* MOP stuff here - NOT YET FULLY IMPLEMENTED */
     sim_debug (DBG_WRN, xq->dev, "Processing MEB type: %d\n", meb->type);
@@ -3147,7 +3147,6 @@ t_stat xq_boot (int32 unitno, DEVICE *dptr)
 {
 #ifdef VM_PDP11
 size_t i;
-DIB *dib = (DIB *)dptr->ctxt;
 extern int32 REGFILE[6][2];                 /* R0-R5, two sets */
 
 for (i = 0; i < BOOT_LEN; i++)
@@ -3373,9 +3372,10 @@ const char helpString[] =
      /****************************************************************************/
     "1 Dependencies\n"
 #if defined(_WIN32)
-    " The WinPcap package must be installed in order to enable\n"
+    " The NPcap or WinPcap package must be installed in order to enable\n"
     " communication with other computers on the local LAN.\n"
     "\n"
+    " The NPcap package is available from https://github.com/nmap/npcap\n"
     " The WinPcap package is available from http://www.winpcap.org/\n"
 #else
     " To build simulators with the ability to communicate to other computers\n"
@@ -3421,6 +3421,9 @@ const char helpString[] =
     " The other simulated Ethernet devices include:\n"
     "\n"
     "++DEUNA/DELUA  Unibus PDP11 and VAX simulators\n"
+    "++XS           VAX simulators\n"
+    "++NI           AT&T 3b2 simulator\n"
+    "++NIA-20       KL10 simulator\n"
     "\n"
     ;
 return scp_help (st, dptr, uptr, flag, helpString, cptr);
