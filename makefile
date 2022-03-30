@@ -1871,6 +1871,10 @@ SCELBIC = ${INTELSYSD}/common
 SCELBI = ${SCELBIC}/i8008.c ${SCELBID}/scelbi_sys.c ${SCELBID}/scelbi_io.c
 SCELBI_OPT = -I ${SCELBID}
 
+MTC8008D = ${INTELSYSD}/mtc8008
+MTC8008C = ${INTELSYSD}/common
+MTC8008 = ${MTC8008C}/i8008.c ${MTC8008D}/mtc8008_sys.c ${MTC8008D}/mtc8008_io.c
+MTC8008_OPT = -I ${MTC8008D}
 
 TX0D = ${SIMHD}/TX-0
 TX0 = ${TX0D}/tx0_cpu.c ${TX0D}/tx0_dpy.c ${TX0D}/tx0_stddev.c \
@@ -2705,6 +2709,15 @@ ${BIN}scelbi${EXE} : ${SCELBI} ${SIM}
 	${CC} ${SCELBI} ${SIM} ${SCELBI_OPT} ${CC_OUTSPEC} ${LDFLAGS}
 ifneq (,$(call find_test,${SCELBID},scelbi))
 	$@ $(call find_test,${SCELBID},scelbi) ${TEST_ARG}
+endif
+
+mtc8008: ${BIN}mtc8008${EXE}
+
+${BIN}mtc8008${EXE} : ${MTC8008} ${SIM}
+	${MKDIRBIN}
+	${CC} ${MTC8008} ${SIM} ${MTC8008_OPT} ${CC_OUTSPEC} ${LDFLAGS}
+ifneq (,$(call find_test,${MTC8008D},mtc8008))
+	$@ $(call find_test,${MTC8008D},mtc8008) ${TEST_ARG}
 endif
 
 tx-0 : ${BIN}tx-0${EXE}
