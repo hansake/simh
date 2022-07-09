@@ -561,8 +561,6 @@ static const MTAB vh_mod[] = {
         &set_addr, &show_addr, NULL, "Bus address" },
     { MTAB_XTD|MTAB_VDV|MTAB_VALR, 0, "VECTOR", "VECTOR",
         &set_vec, &vh_show_vec, (void *) &vh_desc, "Interrupt vector" },
-    { MTAB_XTD|MTAB_VDV, 0, NULL, "AUTOCONFIGURE",
-        &set_addr_flt, NULL, NULL, "Enable autoconfiguration of address & vector" },
     { MTAB_XTD|MTAB_VDV|MTAB_VALR, 0, "LINES", "LINES=n",
         &vh_setnl, &tmxr_show_lines, (void *) &vh_desc, "Display number of lines" },
     { UNIT_ATT,         UNIT_ATT, "summary", NULL,
@@ -1694,6 +1692,10 @@ static t_stat vh_reset (    DEVICE  *dptr   )
         }
     for (i = 0; i < VH_MUXES; i++) {
         if (i < vh_desc.lines/VH_LINES) {
+            char uname[16];
+
+            snprintf (uname, sizeof (uname), "%s%d", vh_dev.name, i);
+            sim_set_uname (&vh_unit[i], uname);
             /* if Unibus, force DHU mode */
             if (UNIBUS)
                 vh_unit[i].flags |= UNIT_MODEDHU;
