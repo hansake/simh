@@ -140,7 +140,7 @@ Support for Phase V DECnet connections on VAX Unibus and Qbus systems and the ad
 
 #### CDC 1700 simulator from John Forecast
 
-#### Hans-�ke Lund has implemented an SCELBI (SCientic-ELectronics-BIology) simulator.
+#### Hans-Åke Lund has implemented an SCELBI (SCientic-ELectronics-BIology) simulator.
 
 #### IBM 650 simulator from Roberto Sancho Villa
 
@@ -681,3 +681,6 @@ Problem reports should contain;
  - the output of SHOW VERSION while running the simulator which is having an issue
  - the simulator configuration file (or commands) which were used when the problem occurred.
  
+# Repository archived
+
+The Intel 8008 related content of this repository is moved to: [opensimh/Intel-Systems at master · hansake/opensimh](https://github.com/hansake/opensimh)
